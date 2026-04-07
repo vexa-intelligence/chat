@@ -1,4 +1,5 @@
 const CONFIG = {
+    BASE: "https://vexa-ai.pages.dev",
     FIREBASE_CONFIG: {
         apiKey: "AIzaSyCdZGDSIVbA9ZjSX55YLIiGoU7GNsgIjOI",
         authDomain: "vexa-ai-chat.firebaseapp.com",
