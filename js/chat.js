@@ -843,6 +843,10 @@ async function loadSessionIntoChat(session) {
         });
         renderChatHistory();
         showPageRaw('chat');
+        setTimeout(() => {
+            const inp = document.getElementById('inp');
+            if (inp) inp.focus();
+        }, 100);
     } finally {
         isLoadingSession = false;
     }
@@ -915,13 +919,52 @@ function initChat() {
         sbtn.disabled = !inp.value.trim() || busy;
     });
     inp.addEventListener('keydown', e => {
-        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); doSend(); }
+        const isMobile = window.innerWidth <= 680;
+        if (e.key === 'Enter') {
+            if (isMobile) {
+                if (e.shiftKey) {
+                    e.preventDefault();
+                    doSend();
+                }
+            } else {
+                if (!e.shiftKey) {
+                    e.preventDefault();
+                    doSend();
+                }
+            }
+        }
     });
     inp.addEventListener('keypress', e => {
-        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); doSend(); }
+        const isMobile = window.innerWidth <= 680;
+        if (e.key === 'Enter') {
+            if (isMobile) {
+                if (e.shiftKey) {
+                    e.preventDefault();
+                    doSend();
+                }
+            } else {
+                if (!e.shiftKey) {
+                    e.preventDefault();
+                    doSend();
+                }
+            }
+        }
     });
     inp.addEventListener('keyup', e => {
-        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); doSend(); }
+        const isMobile = window.innerWidth <= 680;
+        if (e.key === 'Enter') {
+            if (isMobile) {
+                if (e.shiftKey) {
+                    e.preventDefault();
+                    doSend();
+                }
+            } else {
+                if (!e.shiftKey) {
+                    e.preventDefault();
+                    doSend();
+                }
+            }
+        }
     });
     sbtn.addEventListener('click', doSend);
     initSearch();

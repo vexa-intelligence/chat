@@ -499,20 +499,6 @@
             showPageRaw(map[path] || 'chat');
         }
 
-        function showPageRaw(name) {
-            currentPage = name;
-            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-            const page = document.getElementById('page-' + name);
-            if (page) page.classList.add('active');
-            document.querySelectorAll('.sidebar-nav-item').forEach(i => i.classList.remove('active'));
-            if (name === 'images') document.getElementById('navImages')?.classList.add('active');
-            if (name === 'models') document.getElementById('navModels')?.classList.add('active');
-            if (name === 'models') { if (!modelsLoaded) loadModels(); else renderModelsPage(currentModelType); }
-            if (name === 'images') { if (typeof loadImagesFromFirebase === 'function') loadImagesFromFirebase(); }
-            if (name === 'chat') setTimeout(() => document.getElementById('inp')?.focus(), 50);
-            closeMobileDrawer();
-        }
-
         let _pendingChatId = null;
 
         window.addEventListener('popstate', () => navigate(window.location.pathname, false));
