@@ -20,7 +20,10 @@ function initFirebase() {
     window.firebaseDB = db;
     window.firebaseStorage = storage;
 
-    db.settings({ cacheSizeBytes: firebase.firestore.CACHE_SIZE_UNLIMITED });
+    db.settings({
+        cacheSizeBytes: firebase.firestore.CACHE_SIZE_UNLIMITED,
+        merge: true
+    });
     auth.onAuthStateChanged(async (user) => {
         currentUser = user;
         updateAuthUI();
@@ -28,6 +31,14 @@ function initFirebase() {
             closeAuthOverlay();
             await loadUserPrefsFromFirebase();
             await loadChatsFromFirebase();
+
+            navigate(window.location.pathname, false);
+
+            if (typeof _pendingChatId !== 'undefined' && _pendingChatId) {
+                const s = chatSessions.find(s => s.id === _pendingChatId);
+                if (s) { loadSessionIntoChat(s); }
+                _pendingChatId = null;
+            }
             if (typeof loadImagesFromFirebase === 'function') await loadImagesFromFirebase();
         } else {
             chatSessions = [];
