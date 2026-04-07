@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+        content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+    <title>Vexa</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-storage-compat.js"></script>
+    <script src="https://upload-widget.cloudinary.com/global/all.js" type="text/javascript"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <link rel="manifest" href="manifest.json">
+</head>
+
+<body>
+
+    <div id="auth-overlay" class="auth-overlay hidden">
+        <div class="auth-modal">
+            <button class="auth-close" id="authClose"><i class="fa-solid fa-xmark"></i></button>
+            <div class="auth-logo">Vexa</div>
+            <div class="auth-tabs">
+                <button class="auth-tab active" data-tab="login">Log in</button>
+                <button class="auth-tab" data-tab="signup">Sign up</button>
+            </div>
+            <form class="auth-form" id="authForm" autocomplete="off">
+                <input class="auth-input" type="email" id="authEmail" placeholder="Email address" required
+                    autocomplete="email">
+                <input class="auth-input" type="password" id="authPassword" placeholder="Password" required
+                    autocomplete="current-password">
+                <div class="auth-error" id="authError"></div>
+                <button class="auth-submit" type="submit" id="authSubmit">Continue</button>
+            </form>
+            <p class="auth-disclaimer">By continuing, you agree to our <a href="#">Terms</a> and <a href="#">Privacy
+                    Policy</a>.</p>
+        </div>
+    </div>
+
+    <div class="layout">
+        <div class="sidebar" id="sidebar">
+            <div class="sidebar-inner">
+                <div class="sidebar-top">
+                    <div class="sidebar-header">
+                        <div class="sidebar-logo"><img src="images/icon.png"></div>
+                        <button class="icon-btn sidebar-collapse" id="sidebarCollapse" title="Close sidebar">
+                            <i class="fa-regular fa-sidebar fa-lg" style="font-size:15px"></i>
+                        </button>
+                    </div>
+                    <button class="new-chat-btn" id="newChatBtn">
+                        <i class="fa-solid fa-pen-to-square" style="color:var(--muted);font-size:13px"></i>
+                        New chat
+                    </button>
+                    <button class="sidebar-nav-item" id="navSearch">
+                        <i class="fa-solid fa-magnifying-glass" style="color:var(--muted);font-size:13px"></i>
+                        Search chats
+                    </button>
+                    <button class="sidebar-nav-item" id="navImages" onclick="navigate('/images')">
+                        <i class="fa-solid fa-image" style="color:var(--muted);font-size:13px"></i>
+                        Images
+                    </button>
+                    <button class="sidebar-nav-item" id="navModels" onclick="navigate('/models')">
+                        <i class="fa-solid fa-microchip" style="color:var(--muted);font-size:13px"></i>
+                        Models
+                    </button>
+                </div>
+                <div class="sidebar-history" id="sidebarHistory">
+                    <div class="history-section-label">Recents</div>
+                    <div id="chatHistoryList"></div>
+                </div>
+                <div class="sidebar-bottom">
+                    <div id="userSection" class="user-section">
+                        <div class="user-info hidden" id="userInfo">
+                            <div class="user-avatar" id="userAvatar">U</div>
+                            <div class="user-details">
+                                <div class="user-name" id="userName">User</div>
+                                <div class="user-plan" id="userPlan">Free plan</div>
+                            </div>
+                            <button class="icon-btn" id="settingsBtn" title="Settings">
+                                <i class="fa-solid fa-gear" style="font-size:14px"></i>
+                            </button>
+                        </div>
+                        <div class="auth-prompt" id="authPrompt">
+                            <p class="auth-prompt-text">Get responses tailored to you</p>
+                            <p class="auth-prompt-sub">Log in to save chats and create images.</p>
+                            <button class="auth-login-btn" id="sidebarLoginBtn">Log in</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="main" id="main">
+            <div class="topbar">
+                <button class="icon-btn topbar-expand hidden" id="topbarExpand">
+                    <i class="fa-solid fa-bars" style="font-size:15px"></i>
+                </button>
+                <div class="topbar-title" id="topbarTitle">
+                    <span>Vexa</span>
+                    <i class="fa-solid fa-chevron-down" style="font-size:10px;color:var(--muted)"></i>
+                </div>
+                <div class="topbar-right">
+                    <button class="icon-btn" id="topbarSettingsBtn" title="Settings">
+                        <i class="fa-solid fa-gear" style="font-size:15px"></i>
+                    </button>
+                    <button class="topbar-login-btn hidden" id="topbarLoginBtn">Log in</button>
+                </div>
+            </div>
+
+            <div class="page active" id="page-chat">
+                <div class="chat-wrap">
+                    <div id="feed" class="feed">
+                        <div class="feed-empty" id="feedEmpty">
+                            <div class="feed-empty-title"></div>
+                        </div>
+                    </div>
+                    <div class="input-area">
+                        <div class="input-box" id="chatInputBox">
+                            <textarea id="inp" rows="1" placeholder="Ask anything" autocomplete="off"
+                                spellcheck="true"></textarea>
+                            <div class="mobile-input-actions">
+                                <button class="input-tool-btn" id="mobileVoiceBtn" title="Voice">
+                                    <i class="fa-solid fa-microphone" style="font-size:16px"></i>
+                                </button>
+                                <button id="mobileSbtn" class="send-btn" disabled>
+                                    <i class="fa-solid fa-arrow-up" style="font-size:13px"></i>
+                                </button>
+                            </div>
+                            <div class="input-row">
+                                <div class="input-left">
+                                    <button class="input-tool-btn" id="attachBtn" title="Attach">
+                                        <i class="fa-solid fa-paperclip" style="font-size:14px"></i>
+                                    </button>
+                                    <button class="model-select-btn" id="modelSelectBtn">
+                                        <span id="modelSelectLabel">Vexa</span>
+                                        <i class="fa-solid fa-chevron-down" style="font-size:9px"></i>
+                                    </button>
+                                </div>
+                                <div class="input-right">
+                                    <button class="input-tool-btn" id="voiceBtn" title="Voice">
+                                        <i class="fa-solid fa-microphone" style="font-size:14px"></i>
+                                    </button>
+                                    <button id="sbtn" class="send-btn" disabled>
+                                        <i class="fa-solid fa-arrow-up" style="font-size:13px"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="input-disclaimer">Vexa can make mistakes. Verify important info.</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="page" id="page-images">
+                <div class="images-wrap">
+                    <div class="images-header">
+                        <h1 class="page-title">Images</h1>
+                    </div>
+                    <div class="image-gen-input-wrap">
+                        <div class="image-gen-box">
+                            <button class="img-gen-icon-btn" title="Attach image">
+                                <i class="fa-regular fa-image" style="font-size:16px"></i>
+                            </button>
+                            <input type="text" id="imagePromptInp" placeholder="Describe a new image"
+                                class="image-gen-input">
+                            <button class="img-gen-voice-btn" title="Voice">
+                                <i class="fa-solid fa-microphone" style="font-size:15px"></i>
+                            </button>
+                            <button class="img-gen-send" id="imgGenSend">
+                                <i class="fa-solid fa-arrow-up" style="font-size:13px"></i>
+                            </button>
+                        </div>
+                        <div class="image-model-row">
+                            <select id="imageModelSelect" class="image-model-select">
+                                <option value="hd">HD</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="images-styles">
+                        <h3 class="images-section-title">Try a style on an image</h3>
+                        <div class="styles-scroll" id="stylesScroll">
+                            <div class="style-card"
+                                onclick="quickImageSend('Spring botanical portrait, vibrant flowers, warm sunlight')">
+                                <div class="style-card-preview"
+                                    style="background:linear-gradient(135deg,#a8e6cf,#ffd3b6)"></div>
+                                <span>Spring</span>
+                            </div>
+                            <div class="style-card"
+                                onclick="quickImageSend('Caricature trend exaggerated comic art style')">
+                                <div class="style-card-preview"
+                                    style="background:linear-gradient(135deg,#667eea,#764ba2)"></div>
+                                <span>Caricature</span>
+                            </div>
+                            <div class="style-card" onclick="quickImageSend('Flower petals portrait delicate pastel')">
+                                <div class="style-card-preview"
+                                    style="background:linear-gradient(135deg,#f8b4d9,#f3a8d8)"></div>
+                                <span>Flower petals</span>
+                            </div>
+                            <div class="style-card"
+                                onclick="quickImageSend('Gold metallic statue ancient emperor portrait')">
+                                <div class="style-card-preview"
+                                    style="background:linear-gradient(135deg,#f6d365,#fda085)"></div>
+                                <span>Gold</span>
+                            </div>
+                            <div class="style-card"
+                                onclick="quickImageSend('Crayon drawing colorful child illustration style')">
+                                <div class="style-card-preview"
+                                    style="background:linear-gradient(135deg,#84fab0,#8fd3f4)"></div>
+                                <span>Crayon</span>
+                            </div>
+                            <div class="style-card"
+                                onclick="quickImageSend('Watercolor soft painting artistic landscape')">
+                                <div class="style-card-preview"
+                                    style="background:linear-gradient(135deg,#a18cd1,#fbc2eb)"></div>
+                                <span>Watercolor</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="images-discover">
+                        <h3 class="images-section-title">Discover something new</h3>
+                        <div class="discover-grid" id="discoverGrid">
+                            <div class="discover-card"
+                                onclick="quickImageSend('Portrait as a Roman emperor with laurel wreath, cinematic')">
+                                <div class="discover-thumb" style="background:linear-gradient(135deg,#232526,#414345)">
+                                </div>
+                                <span>Me as an emperor</span>
+                            </div>
+                            <div class="discover-card"
+                                onclick="quickImageSend('Redecorate modern living room interior design')">
+                                <div class="discover-thumb" style="background:linear-gradient(135deg,#bdc3c7,#2c3e50)">
+                                </div>
+                                <span>Redecorate my room</span>
+                            </div>
+                            <div class="discover-card"
+                                onclick="quickImageSend('Realistic portrait of a dog reimagined as a human')">
+                                <div class="discover-thumb" style="background:linear-gradient(135deg,#f093fb,#f5576c)">
+                                </div>
+                                <span>Reimagine my pet as a human</span>
+                            </div>
+                            <div class="discover-card"
+                                onclick="quickImageSend('Stylish fashion editorial portrait photography')">
+                                <div class="discover-thumb" style="background:linear-gradient(135deg,#4facfe,#00f2fe)">
+                                </div>
+                                <span>Style me</span>
+                            </div>
+                            <div class="discover-card" onclick="quickImageSend('Bowl cut hairstyle portrait funny')">
+                                <div class="discover-thumb" style="background:linear-gradient(135deg,#43e97b,#38f9d7)">
+                                </div>
+                                <span>Give them a bowl cut</span>
+                            </div>
+                            <div class="discover-card"
+                                onclick="quickImageSend('Black and white coloring page illustration for kids simple')">
+                                <div class="discover-thumb" style="background:linear-gradient(135deg,#e0e0e0,#aaa)">
+                                </div>
+                                <span>Create a coloring page</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="my-images-section" id="myImagesSection">
+                        <h3 class="images-section-title">My images</h3>
+                        <div class="my-images-grid" id="myImagesGrid">
+                            <div class="my-images-empty">Your generated images will appear here</div>
+                        </div>
+                    </div>
+                </div>
+                <div id="imageOutputArea" class="image-output-area hidden"></div>
+            </div>
+
+            <div class="page" id="page-models">
+                <div class="models-wrap">
+                    <div class="models-header">
+                        <h1 class="page-title">Models</h1>
+                        <p class="page-subtitle" id="modelsSubtitle">Loading…</p>
+                    </div>
+                    <div class="models-container" id="modelsContainer">
+                        <div class="loading-state">Loading models…</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="page" id="page-settings"></div>
+
+        </div>
+    </div>
+
+    <div class="settings-modal-overlay hidden" id="settingsModalOverlay">
+        <div class="settings-modal" id="settingsModal">
+            <div class="settings-modal-sidebar">
+                <div class="settings-modal-brand">Settings</div>
+                <button class="settings-tab active" data-section="general">
+                    General
+                </button>
+                <button class="settings-tab" data-section="account">
+                    Account
+                </button>
+                <button class="settings-tab" data-section="appearance">
+                    Appearance
+                </button>
+                <button class="settings-tab" data-section="data">
+                    Data controls
+                </button>
+            </div>
+            <div class="settings-modal-body">
+                <button class="settings-modal-close" id="settingsModalClose">
+                    <i class="fa-solid fa-xmark" style="font-size:14px"></i>
+                </button>
+                <div class="settings-section active" id="settings-general">
+                    <h2 class="settings-section-title">General</h2>
+                    <div class="settings-row">
+                        <div class="settings-row-label">
+                            <span>Theme</span>
+                            <small>Choose your color theme</small>
+                        </div>
+                        <select class="settings-select" id="themeSelect">
+                            <option value="light">Light</option>
+                            <option value="dark">Dark</option>
+                            <option value="system">System</option>
+                        </select>
+                    </div>
+                    <div class="settings-row">
+                        <div class="settings-row-label">
+                            <span>Default model</span>
+                            <small>Used for new conversations</small>
+                        </div>
+                        <select class="settings-select" id="defaultModelSelect">
+                            <option value="">Auto</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="settings-section" id="settings-account">
+                    <h2 class="settings-section-title">Account</h2>
+                    <div id="accountContent">
+                        <div class="account-not-logged">
+                            <p>You are not logged in.</p>
+                            <button class="auth-submit" id="settingsLoginBtn"
+                                style="margin-top:12px;width:auto;padding:10px 24px">Log in</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="settings-section" id="settings-appearance">
+                    <h2 class="settings-section-title">Appearance</h2>
+                    <div class="settings-row">
+                        <div class="settings-row-label">
+                            <span>Font size</span>
+                            <small>Adjust the text size</small>
+                        </div>
+                        <select class="settings-select" id="fontSizeSelect">
+                            <option value="14">Small</option>
+                            <option value="15" selected>Medium</option>
+                            <option value="16">Large</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="settings-section" id="settings-data">
+                    <h2 class="settings-section-title">Data controls</h2>
+                    <div class="settings-row">
+                        <div class="settings-row-label">
+                            <span>Clear all chats</span>
+                            <small>Permanently delete all your chat history</small>
+                        </div>
+                        <button class="settings-danger-btn" id="clearChatsBtn">Clear all</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="model-picker-overlay hidden" id="modelPickerOverlay">
+        <div class="model-picker" id="modelPicker">
+            <div class="model-picker-head">Model</div>
+            <div class="model-picker-list" id="modelPickerList">
+                <div class="model-picker-item selected" data-val="">
+                    <div class="mpi-info">
+                        <div class="mpi-name">Auto</div>
+                        <div class="mpi-sub">Auto-selected</div>
+                    </div>
+                    <i class="fa-solid fa-check mpi-check" style="font-size:13px"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="mobile-overlay" id="mobileOverlay"></div>
+
+    <div class="mobile-drawer" id="mobileDrawer">
+        <div class="mobile-drawer-head">
+            <img class="mobile-drawer-logo" src="images/icon.png" alt="Vexa">
+            <button class="mobile-drawer-close" id="mobileDrawerClose">
+                <i class="fa-solid fa-xmark" style="font-size:15px"></i>
+            </button>
+        </div>
+        <div class="mobile-drawer-nav">
+            <button class="mobile-drawer-nav-item" id="mdNewChat">
+                <i class="fa-solid fa-pen-to-square" style="font-size:15px"></i>
+                New chat
+            </button>
+            <button class="mobile-drawer-nav-item" id="mdSearch">
+                <i class="fa-solid fa-magnifying-glass" style="font-size:15px"></i>
+                Search chats
+            </button>
+            <button class="mobile-drawer-nav-item" id="mdImages" onclick="navigate('/images')">
+                <i class="fa-solid fa-image" style="font-size:15px"></i>
+                Images
+            </button>
+            <button class="mobile-drawer-nav-item" id="mdModels" onclick="navigate('/models')">
+                <i class="fa-solid fa-microchip" style="font-size:15px"></i>
+                Models
+            </button>
+        </div>
+        <div class="mobile-drawer-divider"></div>
+        <div class="mobile-drawer-section-label">Recents</div>
+        <div class="mobile-drawer-history" id="mobileHistoryList"></div>
+        <div class="mobile-drawer-foot">
+            <div id="mobileUserSection">
+                <div id="mobileUserRow" class="hidden">
+                    <button class="mobile-drawer-user" id="mobileUserBtn">
+                        <div class="mobile-drawer-user-avatar" id="mobileUserAvatar">U</div>
+                        <div class="mobile-drawer-user-info">
+                            <div class="mobile-drawer-user-name" id="mobileUserName">User</div>
+                            <div class="mobile-drawer-user-plan" id="mobileUserPlan">Free</div>
+                        </div>
+                    </button>
+                </div>
+                <div id="mobileLoginRow" class="mobile-login-row">
+                    <button class="mobile-login-row-btn" id="mobileLoginBtn">Log in</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="user-popover-overlay" id="userPopoverOverlay">
+        <div class="user-popover" id="userPopover">
+            <div class="user-popover-head">
+                <div class="user-popover-avatar" id="popoverAvatar">U</div>
+                <div>
+                    <div class="user-popover-name" id="popoverName">User</div>
+                    <div class="user-popover-plan" id="popoverPlan">Free plan</div>
+                </div>
+            </div>
+            <div class="user-popover-body">
+                <button class="user-popover-item" id="popoverSettings">
+                    <i class="fa-solid fa-gear" style="font-size:14px"></i>
+                    Settings
+                </button>
+                <div class="user-popover-sep"></div>
+                <button class="user-popover-item danger" id="popoverLogout">
+                    <i class="fa-solid fa-right-from-bracket" style="font-size:14px"></i>
+                    Log out
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="search-modal-overlay hidden" id="searchModalOverlay">
+        <div class="search-modal" id="searchModal">
+            <div class="search-modal-input-wrap">
+                <div class="search-input-box">
+                    <i class="fa-solid fa-magnifying-glass search-icon"></i>
+                    <input type="text" id="searchInput" placeholder="Search chats..." autocomplete="off">
+                    <button class="search-clear-btn hidden" id="searchClearBtn">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="search-results" id="searchResults">
+                <div class="search-empty-state">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                    <p>Type to search your chat history</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="custom-alert-overlay hidden" id="customAlertOverlay">
+        <div class="custom-alert" id="customAlert">
+            <h3 class="custom-alert-title" id="customAlertTitle"></h3>
+            <p class="custom-alert-message" id="customAlertMessage"></p>
+            <div class="custom-alert-actions">
+                <button class="custom-alert-cancel-btn" id="customAlertCancel"></button>
+                <button class="custom-alert-confirm-btn" id="customAlertConfirm"></button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const routes = {
+            '/': 'chat',
+            '/images': 'images',
+            '/models': 'models'
+        };
+
+        function navigate(path) {
+            window.history.pushState({}, '', path);
+            const page = routes[path] || 'chat';
+            showPage(page);
+        }
+
+        function showPage(name) {
+            currentPage = name;
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            const page = document.getElementById('page-' + name);
+            if (page) page.classList.add('active');
+
+            document.querySelectorAll('.sidebar-nav-item').forEach(i => i.classList.remove('active'));
+            if (name === 'images') {
+                document.getElementById('navImages')?.classList.add('active');
+                window.history.pushState({}, '', '/images');
+            }
+            if (name === 'models') {
+                document.getElementById('navModels')?.classList.add('active');
+                window.history.pushState({}, '', '/models');
+            }
+            if (name === 'chat') {
+                window.history.pushState({}, '', '/');
+            }
+
+            if (name === 'models') {
+                if (!modelsLoaded) loadModels(); else renderModelsPage(currentModelType);
+            }
+            if (name === 'chat') setTimeout(() => document.getElementById('inp')?.focus(), 50);
+            closeMobileDrawer();
+        }
+
+        window.addEventListener('popstate', () => {
+            const page = routes[window.location.pathname] || 'chat';
+            showPage(page);
+        });
+    </script>
+    <script src="js/alerts.js"></script>
+    <script src="js/env.js"></script>
+    <script src="js/config.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/chat.js"></script>
+    <script src="js/images.js"></script>
+    <script src="js/models.js"></script>
+    <script src="js/settings.js"></script>
+    <script src="js/app.js"></script>
+</body>
+
+</html>
