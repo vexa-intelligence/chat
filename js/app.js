@@ -216,10 +216,6 @@ document.addEventListener('DOMContentLoaded', () => {
         showPage('images');
         closeMobileDrawer();
     });
-    document.getElementById('mdModels').addEventListener('click', () => {
-        showPage('models');
-        closeMobileDrawer();
-    });
     document.getElementById('mobileLoginBtn').addEventListener('click', () => {
         openAuthOverlay();
     });

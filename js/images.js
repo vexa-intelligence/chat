@@ -137,6 +137,33 @@ async function loadImagesFromFirebase() {
   }
 }
 
+async function compressImage(blob, quality = 0.7, maxWidth = 1024, maxHeight = 1024) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+
+    img.onload = () => {
+      let { width, height } = img;
+
+      if (width > maxWidth || height > maxHeight) {
+        const ratio = Math.min(maxWidth / width, maxHeight / height);
+        width *= ratio;
+        height *= ratio;
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+
+      ctx.drawImage(img, 0, 0, width, height);
+
+      canvas.toBlob(resolve, 'image/jpeg', quality);
+    };
+
+    img.src = URL.createObjectURL(blob);
+  });
+}
+
 async function saveImagesToFirebase() {
   const db = window.firebaseDB;
   if (!db || !currentUser) return;
@@ -146,11 +173,12 @@ async function saveImagesToFirebase() {
       let base64 = '';
 
       if (img.blob) {
+        const compressedBlob = await compressImage(img.blob, 0.7, 1024, 1024);
         base64 = await new Promise((resolve, reject) => {
           const reader = new FileReader();
           reader.onload = () => resolve(reader.result);
           reader.onerror = reject;
-          reader.readAsDataURL(img.blob);
+          reader.readAsDataURL(compressedBlob);
         });
       }
 
@@ -368,10 +396,11 @@ function closeImageOutput() {
   document.getElementById('imageOutputArea')?.classList.add('hidden');
 }
 
-function quickImageSend(prompt) {
+async function quickImageSend(prompt) {
   const inp = document.getElementById('imagePromptInp');
-  inp.value = prompt;
-  generateImage(prompt);
+  if (inp) inp.value = prompt;
+  await newChat();
+  await sendImagePrompt(prompt);
 }
 
 function initImages() {

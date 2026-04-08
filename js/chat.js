@@ -5,16 +5,17 @@ let currentModel = '';
 let currentModelLabel = 'Vexa';
 let isLoadingSession = false;
 
-const IMG_RE = /\b(generate|create|draw|make|paint|render|produce|design|imagine)\b[\s\S]{0,60}?\b(image|picture|photo|illustration|artwork|painting|drawing|portrait|landscape|scene|wallpaper)\b|\b(image|picture|photo)\s+of\b|^(draw|paint|generate|render|imagine)\b/i;
+const IMG_RE = /\b(generate|create|draw|make|paint|render|produce|design|imagine)\s+(an?\s+)?(image|picture|photo|illustration|artwork|painting|drawing|portrait|landscape|scene|wallpaper)\b|\b(image|picture|photo|illustration|artwork|painting|drawing|portrait|landscape|scene|wallpaper)\b/i;
 
 function isImg(t) { return IMG_RE.test(t); }
 
 function cleanImgPrompt(t) {
-    return t.replace(/\b(please|can you|could you|hey|vexa)\b/gi, '')
+    return t.replace(/['"]/g, '')
+        .replace(/\b(please|can you|could you|hey|vexa)\b/gi, '')
         .replace(/\b(generate|create|draw|make|paint|render|produce|design|imagine)\b/gi, '')
         .replace(/\b(an?|the)\s+(image|picture|photo|illustration|artwork|painting|drawing|portrait)\b/gi, '')
         .replace(/\b(image|picture|photo)\s+(of|showing|depicting)\b/gi, '')
-        .replace(/\s+/g, ' ').trim() || t;
+        .replace(/\s+/g, ' ').trim() || t.replace(/['"]/g, '');
 }
 
 function escHtml(t) {
@@ -688,8 +689,11 @@ async function sendChatText(userMessage, loading, session) {
 }
 
 async function sendChatImage(prompt, loading) {
-    const imgModel = document.getElementById('image-model-select')?.value || 'hd';
-    const res = await fetch(`${CONFIG.BASE}/image?q=${encodeURIComponent(prompt)}&model=${encodeURIComponent(imgModel)}`);
+    let imagePrompt = cleanImgPrompt(prompt);
+    if (!/^(draw|paint|generate|render|create|imagine|make)\b/i.test(imagePrompt)) {
+        imagePrompt = 'Generate an image of ' + imagePrompt;
+    }
+    const res = await fetch(`${CONFIG.BASE}/image?q=${encodeURIComponent(imagePrompt)}&model=hd`);
     if (!res.ok) throw new Error('Image API ' + res.status);
     const raw = await res.json();
     const remoteUrl = raw.proxy_url ?? raw.url ?? raw.image ?? raw.src ?? (raw.data && (raw.data.url ?? raw.data.proxy_url)) ?? '';
@@ -722,6 +726,7 @@ async function sendChatImage(prompt, loading) {
 async function sendText(text) {
     busy = true;
     showPageRaw('chat');
+    document.querySelector('.chat-wrap')?.classList.remove('empty-chat');
     const feedEmpty = document.getElementById('feedEmpty');
     if (feedEmpty) feedEmpty.remove();
 
@@ -791,6 +796,61 @@ async function sendText(text) {
     scrollBottom();
 }
 
+async function sendImagePrompt(prompt) {
+    busy = true;
+    showPageRaw('chat');
+    document.querySelector('.chat-wrap')?.classList.remove('empty-chat');
+    const feedEmpty = document.getElementById('feedEmpty');
+    if (feedEmpty) feedEmpty.remove();
+
+    let session;
+    if (!currentSessionId || !chatSessions.find(s => s.id === currentSessionId)) {
+        const newId = crypto.randomUUID ? crypto.randomUUID() : Date.now().toString();
+        session = { id: newId, title: prompt.slice(0, 40), messages: [] };
+        chatSessions.unshift(session);
+        currentSessionId = newId;
+        window.history.pushState({}, '', '/chat/' + newId);
+        renderChatHistory();
+    } else {
+        session = chatSessions.find(s => s.id === currentSessionId);
+    }
+
+    session.messages.push({ role: 'user', content: prompt });
+    addBubble('user', prompt);
+    const loading = addLoading();
+
+    let aiReply = null;
+    try {
+        aiReply = await sendChatImage(prompt, loading);
+    } catch (err) {
+        swapText(loading, 'Error - ' + (err.message || 'try again.'));
+    }
+
+    if (aiReply) {
+        const replyContent = typeof aiReply === 'object' ? aiReply : aiReply;
+        if (typeof replyContent === 'object' && replyContent.type === 'image') {
+            session.messages.push({ role: 'assistant', content: replyContent });
+        } else {
+            session.messages.push({ role: 'assistant', content: replyContent });
+        }
+        if (session.messages.filter(m => m.role === 'user').length === 1) {
+            const aiTitle = await generateChatTitle(prompt, typeof aiReply === 'string' ? aiReply : '');
+            if (aiTitle) {
+                session.title = aiTitle;
+                renderChatHistory();
+            }
+        }
+        await saveChatToFirebase(session.id, session.title, session.messages);
+    }
+
+    busy = false;
+    const sbtn = document.getElementById('sbtn');
+    const inp = document.getElementById('inp');
+    if (sbtn) sbtn.disabled = !inp?.value.trim();
+    if (inp) inp.focus();
+    scrollBottom();
+}
+
 async function loadSessionIntoChat(session) {
     if (isLoadingSession) {
         return;
@@ -802,8 +862,11 @@ async function loadSessionIntoChat(session) {
         window.history.pushState({}, '', '/chat/' + session.id);
         const feed = document.getElementById('feed');
         feed.innerHTML = '';
+        const chatWrap = document.querySelector('.chat-wrap');
+        if (chatWrap) chatWrap.classList.toggle('empty-chat', !session.messages || !session.messages.length);
 
         if (!session.messages || !session.messages.length) {
+            if (chatWrap) chatWrap.classList.add('empty-chat');
             const empty = document.createElement('div');
             empty.className = 'feed-empty';
             empty.id = 'feedEmpty';
@@ -850,6 +913,30 @@ async function loadSessionIntoChat(session) {
     } finally {
         isLoadingSession = false;
     }
+}
+
+async function newChat() {
+    currentSessionId = null;
+    window.history.pushState({}, '', '/new-chat');
+    renderChatHistory();
+    const feed = document.getElementById('feed');
+    feed.innerHTML = '';
+    const chatWrap = document.querySelector('.chat-wrap');
+    if (chatWrap) chatWrap.classList.add('empty-chat');
+    const empty = document.createElement('div');
+    empty.className = 'feed-empty';
+    empty.id = 'feedEmpty';
+    const title = await generateEmptyTitle();
+    empty.innerHTML = `<div class="feed-empty-title"></div>`;
+    feed.appendChild(empty);
+
+    const titleEl = empty.querySelector('.feed-empty-title');
+    if (title && titleEl) {
+        await typewriterTitle(titleEl, title);
+    }
+
+    showPageRaw('chat');
+    document.getElementById('inp')?.focus();
 }
 
 function renderChatHistory() {
@@ -1006,7 +1093,6 @@ function resetSearchResults() {
     const resultsContainer = document.getElementById('searchResults');
     resultsContainer.innerHTML = `
         <div class="search-empty-state">
-            <i class="fa-solid fa-magnifying-glass" style="font-size:24px;color:var(--muted)"></i>
             <p>Type to search your chat history</p>
         </div>
     `;

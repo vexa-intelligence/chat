@@ -64,10 +64,6 @@
                         <i class="fa-solid fa-image"></i>
                         Images
                     </button>
-                    <button class="sidebar-nav-item" id="navModels" onclick="navigate('/models')">
-                        <i class="fa-solid fa-microchip"></i>
-                        Models
-                    </button>
                 </div>
 
                 <div class="sidebar-history" id="sidebarHistory">
@@ -112,7 +108,7 @@
                 <div class="chat-wrap">
                     <div id="feed" class="feed">
                         <div class="feed-empty" id="feedEmpty">
-                            <div class="feed-empty-title"></div> 
+                            <div class="feed-empty-title"></div>
                         </div>
                     </div>
                     <div class="input-backdrop" id="inputBackdrop"></div>
@@ -138,9 +134,7 @@
 
             <div class="page" id="page-images">
                 <div class="images-wrap">
-                    <div class="images-header">
-                        <h1 class="page-title">Images</h1>
-                    </div>
+                    <h1 class="page-title">Images</h1>
                     <div class="image-gen-input-wrap">
                         <div class="image-gen-box">
                             <button class="img-gen-icon-btn" title="Attach image">
@@ -236,19 +230,15 @@
                 </div>
                 <div id="imageOutputArea" class="image-output-area hidden"></div>
             </div>
-
             <div class="page" id="page-models">
                 <div class="models-wrap">
-                    <div class="models-header">
-                        <h1 class="page-title">Models</h1>
-                        <p class="page-subtitle" id="modelsSubtitle">Loading…</p>
+                    <h1 class="page-title">Models</h1>
+                    <div class="models-summary">
+                        <span id="modelsSubtitle">Loading models…</span>
                     </div>
-                    <div class="models-container" id="modelsContainer">
-                        <div class="loading-state">Loading models…</div>
-                    </div>
+                    <div id="modelsContainer" class="models-container"></div>
                 </div>
             </div>
-
             <div class="page" id="page-settings"></div>
         </div>
     </div>
@@ -364,10 +354,6 @@
                 <i class="fa-solid fa-image"></i>
                 Images
             </button>
-            <button class="mobile-drawer-nav-item" id="mdModels" onclick="navigate('/models')">
-                <i class="fa-solid fa-microchip"></i>
-                Models
-            </button>
         </div>
         <div class="mobile-drawer-divider"></div>
         <div class="mobile-drawer-section-label">Recents</div>
@@ -426,7 +412,6 @@
             </div>
             <div class="search-results" id="searchResults">
                 <div class="search-empty-state">
-                    <i class="fa-solid fa-magnifying-glass"></i>
                     <p>Type to search your chat history</p>
                 </div>
             </div>
@@ -464,7 +449,7 @@
                 }
                 return;
             }
-            const map = { '/': 'chat', '/new-chat': 'chat', '/images': 'images', '/models': 'models' };
+            const map = { '/': 'chat', '/new-chat': 'chat', '/images': 'images' };
             showPageRaw(map[path] || 'chat');
         }
 
