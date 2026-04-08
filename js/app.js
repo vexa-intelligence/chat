@@ -55,7 +55,6 @@ function navigate(path, pushState = true) {
 }
 
 function toggleSidebar() {
-    // Check if mobile (width <= 680px) OR landscape mode with small height
     const isMobile = window.innerWidth <= 680;
     const isLandscapeMobile = window.innerHeight <= 600 && window.innerWidth > window.innerHeight;
 
@@ -191,7 +190,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (input && currentPage === 'chat') input.focus();
     }, 100);
 
-    // Global focus management - keep input always focused
     initGlobalFocusManagement();
 
     document.getElementById('sidebarCollapse').addEventListener('click', toggleSidebar);
@@ -366,7 +364,6 @@ document.addEventListener('keydown', e => {
         if (backdrop?.classList.contains('visible')) hideInputOverlay();
     }
 
-    // Global focus management - refocus input on any key press that's not already focused
     const inp = document.getElementById('inp');
     if (inp && document.activeElement !== inp && currentPage === 'chat' &&
         !e.ctrlKey && !e.metaKey && !e.altKey &&
@@ -380,7 +377,6 @@ function initGlobalFocusManagement() {
     const inp = document.getElementById('inp');
     if (!inp) return;
 
-    // Focus input when clicking anywhere on the page (except other inputs/buttons)
     document.addEventListener('click', (e) => {
         if (currentPage === 'chat' &&
             !e.target.matches('input, textarea, select, button, a') &&
@@ -390,7 +386,6 @@ function initGlobalFocusManagement() {
         }
     });
 
-    // Focus input when switching to chat page
     const originalShowPageRaw = showPageRaw;
     showPageRaw = function (name) {
         originalShowPageRaw(name);
@@ -401,21 +396,18 @@ function initGlobalFocusManagement() {
         }
     };
 
-    // Focus input on window focus (when user returns to the tab)
     window.addEventListener('focus', () => {
         if (currentPage === 'chat' && inp) {
             setTimeout(() => inp.focus(), 100);
         }
     });
 
-    // Focus input on visibility change (when user returns to the app)
     document.addEventListener('visibilitychange', () => {
         if (!document.hidden && currentPage === 'chat' && inp) {
             setTimeout(() => inp.focus(), 100);
         }
     });
 
-    // Ensure input stays focused after sending messages
     const originalDoSend = window.doSend;
     if (originalDoSend) {
         window.doSend = function () {
