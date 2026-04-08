@@ -178,10 +178,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     loadModels();
 
+    const el = document.querySelector('.feed-empty-title');
+    if (el) {
+        el.textContent = '...';
+    }
+
     generateEmptyTitle().then(title => {
-        const el = document.querySelector('.feed-empty-title');
-        if (el && title) {
-            typewriterTitle(el, title);
+        const titleEl = document.querySelector('.feed-empty-title');
+        if (titleEl && title) {
+            titleEl.textContent = title;
         }
     });
 
