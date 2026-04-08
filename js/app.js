@@ -1,5 +1,9 @@
 let currentPage = 'chat';
 
+function filterLettersNumbers(t) {
+    return String(t).replace(/[^a-zA-Z0-9\s]/g, '').trim();
+}
+
 function showPageRaw(name) {
     document.querySelectorAll('.page').forEach(page => {
         page.classList.remove('active');
@@ -20,7 +24,6 @@ function showPage(name) {
 }
 
 function navigate(path, pushState = true) {
-
     if (pushState) {
         window.history.pushState({}, '', path);
     }
@@ -62,9 +65,18 @@ function toggleSidebar() {
         openMobileDrawer();
     } else {
         const sidebar = document.getElementById('sidebar');
+        const isCollapsed = sidebar.classList.contains('collapsed');
+
         sidebar.classList.toggle('collapsed');
-        document.getElementById('topbarExpand')
-            .classList.toggle('visible', sidebar.classList.contains('collapsed'));
+
+        const topbarExpand = document.getElementById('topbarExpand');
+        const icon = topbarExpand.querySelector('i');
+
+        if (isCollapsed) {
+            icon.className = 'fa-solid fa-xmark';
+        } else {
+            icon.className = 'fa-solid fa-bars';
+        }
     }
 }
 
@@ -92,7 +104,7 @@ function syncMobileHistory() {
         item.dataset.id = s.id;
 
         item.innerHTML = `
-            <div class="history-item-content">${escHtml(s.title)}</div>
+            <div class="history-item-content">${filterLettersNumbers(s.title)}</div>
             <button class="history-item-del" data-id="${escHtml(s.id)}">
                 <i class="fa-solid fa-xmark"></i>
             </button>
@@ -115,30 +127,19 @@ function syncMobileHistory() {
 }
 
 function syncMobileUser() {
+    const avatarTop = document.getElementById('mobileUserAvatarTop');
+    if (!avatarTop) return;
+
     if (!currentUser) {
-        document.getElementById('mobileUserRow')?.classList.add('hidden');
-        document.getElementById('mobileLoginRow')?.classList.remove('hidden');
+        avatarTop.innerHTML = '<i class="fa-solid fa-user" style="font-size:14px"></i>';
         return;
     }
 
-    document.getElementById('mobileUserRow')?.classList.remove('hidden');
-    document.getElementById('mobileLoginRow')?.classList.add('hidden');
-
     const email = currentUser.email || '';
     const savedAvatar = localStorage.getItem('user_avatar_' + currentUser.uid);
-    const avatarEl = document.getElementById('mobileUserAvatar');
-
-    if (avatarEl) {
-        avatarEl.innerHTML = savedAvatar
-            ? `<img src="${savedAvatar}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`
-            : email.charAt(0).toUpperCase();
-    }
-
-    const nameEl = document.getElementById('mobileUserName');
-    const planEl = document.getElementById('mobileUserPlan');
-
-    if (nameEl) nameEl.textContent = email.split('@')[0];
-    if (planEl) planEl.textContent = 'Free';
+    avatarTop.innerHTML = savedAvatar
+        ? `<img src="${savedAvatar}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`
+        : email.charAt(0).toUpperCase();
 }
 
 function openUserPopover() {
@@ -197,32 +198,30 @@ document.addEventListener('DOMContentLoaded', () => {
 
     initGlobalFocusManagement();
 
-    document.getElementById('sidebarCollapse').addEventListener('click', toggleSidebar);
-    document.getElementById('topbarExpand').addEventListener('click', toggleSidebar);
-    document.getElementById('newChatBtn').addEventListener('click', newChat);
-    document.getElementById('navSearch').addEventListener('click', openSearchModal);
+    const sidebarCollapse = document.getElementById('sidebarCollapse');
+    if (sidebarCollapse) sidebarCollapse.addEventListener('click', toggleSidebar);
 
-    document.getElementById('mobileDrawerClose').addEventListener('click', closeMobileDrawer);
-    document.getElementById('mobileOverlay').addEventListener('click', closeMobileDrawer);
-    document.getElementById('mdNewChat').addEventListener('click', () => {
-        newChat();
-        closeMobileDrawer();
+    const topbarExpand = document.getElementById('topbarExpand');
+    if (topbarExpand) topbarExpand.addEventListener('click', toggleSidebar);
+
+    const newChatBtn = document.getElementById('newChatBtn');
+    if (newChatBtn) newChatBtn.addEventListener('click', newChat);
+
+    const navSearch = document.getElementById('navSearch');
+    if (navSearch) navSearch.addEventListener('click', openSearchModal);
+
+    const mobileOverlay = document.getElementById('mobileOverlay');
+    if (mobileOverlay) mobileOverlay.addEventListener('click', closeMobileDrawer);
+
+    document.getElementById('mobileUserAvatarTop')?.addEventListener('click', e => {
+        e.stopPropagation();
+        if (!currentUser) { openAuthOverlay(); return; }
+        openUserPopover();
     });
-    document.getElementById('mdSearch').addEventListener('click', () => {
+
+    document.getElementById('mdSearchBtn')?.addEventListener('click', () => {
         closeMobileDrawer();
         openSearchModal();
-    });
-    document.getElementById('mdImages').addEventListener('click', () => {
-        showPage('images');
-        closeMobileDrawer();
-    });
-    document.getElementById('mobileLoginBtn').addEventListener('click', () => {
-        openAuthOverlay();
-    });
-
-    document.getElementById('mobileUserBtn')?.addEventListener('click', e => {
-        e.stopPropagation();
-        openUserPopover();
     });
 
     document.getElementById('userInfo')?.addEventListener('click', e => {
@@ -244,18 +243,7 @@ document.addEventListener('DOMContentLoaded', () => {
         signOut();
     });
 
-    const mobileSbtn = document.getElementById('mobileSbtn');
-    const inp = document.getElementById('inp');
-
-    if (mobileSbtn && inp) {
-        inp.addEventListener('input', () => {
-            mobileSbtn.disabled = !inp.value.trim() || busy;
-        });
-        mobileSbtn.addEventListener('click', doSend);
-    }
-
     const voiceBtn = document.getElementById('voiceBtn');
-    const mobileVoiceBtn = document.getElementById('mobileVoiceBtn');
     let recognition = null;
 
     if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
@@ -264,6 +252,8 @@ document.addEventListener('DOMContentLoaded', () => {
         recognition.continuous = false;
         recognition.interimResults = false;
         recognition.lang = 'en-US';
+
+        const inp = document.getElementById('inp');
 
         recognition.onresult = (event) => {
             const transcript = event.results[0][0].transcript;
@@ -279,22 +269,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
         recognition.onend = () => {
             if (voiceBtn) voiceBtn.innerHTML = '<i class="fa-solid fa-microphone" style="font-size:14px"></i>';
-            if (mobileVoiceBtn) mobileVoiceBtn.innerHTML = '<i class="fa-solid fa-microphone" style="font-size:16px"></i>';
         };
 
         const startVoiceInput = () => {
             if (recognition) {
                 recognition.start();
                 if (voiceBtn) voiceBtn.innerHTML = '<i class="fa-solid fa-stop" style="font-size:14px"></i>';
-                if (mobileVoiceBtn) mobileVoiceBtn.innerHTML = '<i class="fa-solid fa-stop" style="font-size:16px"></i>';
             }
         };
 
         if (voiceBtn) voiceBtn.addEventListener('click', startVoiceInput);
-        if (mobileVoiceBtn) mobileVoiceBtn.addEventListener('click', startVoiceInput);
     } else {
         if (voiceBtn) voiceBtn.style.display = 'none';
-        if (mobileVoiceBtn) mobileVoiceBtn.style.display = 'none';
     }
 
     const attachBtn = document.getElementById('attachBtn');
@@ -304,16 +290,69 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    const topbarExpand = document.getElementById('topbarExpand');
+    topbarExpand?.classList.add('visible');
 
-    if (window.innerWidth > 680) topbarExpand.classList.remove('visible');
-    else topbarExpand.classList.add('visible');
+    const scrollBtn = document.getElementById('scrollToBottomBtn');
+    let touchStartY = 0;
+    let touchStartX = 0;
+
+    function updateScrollButton() {
+        const feed = document.getElementById('feed');
+        if (!feed || !scrollBtn) return;
+
+        const isScrolledUp = feed.scrollTop < feed.scrollHeight - feed.clientHeight - 100;
+        scrollBtn.classList.toggle('visible', isScrolledUp);
+    }
+
+    const feed = document.getElementById('feed');
+    if (feed) {
+        feed.addEventListener('scroll', updateScrollButton);
+    }
+
+    if (scrollBtn) {
+        scrollBtn.addEventListener('touchstart', (e) => {
+            touchStartY = e.touches[0].clientY;
+            touchStartX = e.touches[0].clientX;
+        }, { passive: true });
+
+        scrollBtn.addEventListener('touchmove', (e) => {
+            const touchY = e.touches[0].clientY;
+            const touchX = e.touches[0].clientX;
+            const deltaY = touchY - touchStartY;
+            const deltaX = touchX - touchStartX;
+
+            if (deltaY > 50 && Math.abs(deltaX) < Math.abs(deltaY)) {
+                scrollBtn.classList.add('swiping-down');
+            }
+        }, { passive: true });
+
+        scrollBtn.addEventListener('touchend', (e) => {
+            const touchY = e.changedTouches[0].clientY;
+            const deltaY = touchY - touchStartY;
+
+            if (deltaY > 80) {
+                scrollBtn.classList.remove('visible');
+                setTimeout(() => {
+                    scrollBtn.classList.remove('swiping-down');
+                }, 300);
+            } else {
+                scrollBtn.classList.remove('swiping-down');
+            }
+        });
+
+        scrollBtn.addEventListener('click', () => {
+            const feed = document.getElementById('feed');
+            if (feed) {
+                feed.scrollTo({
+                    top: feed.scrollHeight,
+                    behavior: 'smooth'
+                });
+            }
+        });
+    }
 
     window.addEventListener('resize', () => {
-        if (window.innerWidth <= 680) {
-            topbarExpand.classList.add('visible');
-        } else {
-            topbarExpand.classList.remove('visible');
+        if (window.innerWidth > 680) {
             closeMobileDrawer();
         }
     });
@@ -322,7 +361,65 @@ document.addEventListener('DOMContentLoaded', () => {
         const theme = localStorage.getItem('vexa_theme') || 'light';
         if (theme === 'system') applyTheme('system');
     });
+
+    let themeSwitchTimeout = null;
+    const debouncedApplyTheme = (theme) => {
+        clearTimeout(themeSwitchTimeout);
+        themeSwitchTimeout = setTimeout(() => {
+            if (typeof applyTheme === 'function') {
+                applyTheme(theme);
+            }
+        }, 50);
+    };
+
+    document.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'T') {
+            e.preventDefault();
+            const currentTheme = localStorage.getItem('vexa_theme') || 'light';
+            const themes = ['light', 'dark', 'system'];
+            const currentIndex = themes.indexOf(currentTheme);
+            const nextTheme = themes[(currentIndex + 1) % themes.length];
+
+            const themeSelect = document.getElementById('themeSelect');
+            if (themeSelect) {
+                themeSelect.value = nextTheme;
+            }
+
+            localStorage.setItem('vexa_theme', nextTheme);
+            if (currentUser) {
+                saveUserPrefToFirebase('theme', nextTheme);
+            }
+            debouncedApplyTheme(nextTheme);
+        }
+    });
+
+    document.documentElement.classList.add('theme-initialized');
+    setTimeout(() => {
+        document.documentElement.classList.remove('theme-initialized');
+    }, 500);
+
+    if (typeof watchSystemThemeChanges === 'function') {
+        watchSystemThemeChanges();
+    }
 });
+
+(function () {
+    function checkDrawerOpen() {
+        var drawer = document.getElementById('mobileDrawer');
+        var btn = document.getElementById('floatingChatBtn');
+        if (!btn) return;
+        if (drawer && drawer.classList.contains('open')) {
+            btn.style.display = 'flex';
+        } else {
+            btn.style.display = 'none';
+        }
+    }
+    var drawer = document.getElementById('mobileDrawer');
+    if (drawer) {
+        var obs = new MutationObserver(checkDrawerOpen);
+        obs.observe(drawer, { attributes: true, attributeFilter: ['class'] });
+    }
+})();
 
 function showInputOverlay() {
     const inputArea = document.querySelector('.input-area');

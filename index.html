@@ -43,7 +43,7 @@
     </div>
 
     <div class="layout">
-        <div class="sidebar" id="sidebar">
+        <div class="sidebar collapsed" id="sidebar">
             <div class="sidebar-inner">
                 <div class="sidebar-top">
                     <div class="sidebar-header">
@@ -92,7 +92,7 @@
 
         <div class="main" id="main">
             <div class="topbar">
-                <button class="icon-btn topbar-expand hidden" id="topbarExpand">
+                <button class="icon-btn topbar-expand visible" id="topbarExpand">
                     <i class="fa-solid fa-bars" style="font-size:15px"></i>
                 </button>
                 <div class="topbar-title" id="topbarTitle">
@@ -100,6 +100,9 @@
                     <i class="fa-solid fa-chevron-down" style="font-size:10px;color:var(--muted)"></i>
                 </div>
                 <div class="topbar-right">
+                    <button class="icon-btn topbar-new-chat-btn" id="topbarNewChatBtn" onclick="newChat()">
+                        <i class="fa-solid fa-pen-to-square" style="font-size:15px"></i>
+                    </button>
                     <button class="topbar-login-btn hidden" id="topbarLoginBtn">Log in</button>
                 </div>
             </div>
@@ -112,6 +115,9 @@
                         </div>
                     </div>
                     <div class="input-backdrop" id="inputBackdrop"></div>
+                    <button class="scroll-to-bottom-btn" id="scrollToBottomBtn" onclick="scrollBottom()">
+                        <i class="fa-solid fa-chevron-down"></i>
+                    </button>
                     <div class="input-area">
                         <div class="input-box" id="chatInputBox">
                             <div class="input-row-inline">
@@ -152,76 +158,101 @@
                         <div class="styles-scroll" id="stylesScroll">
                             <div class="style-card"
                                 onclick="quickImageSend('Spring botanical portrait, vibrant flowers, warm sunlight')">
-                                <div class="style-card-preview"
-                                    style="background:linear-gradient(135deg,#a8e6cf,#ffd3b6)"></div>
+                                <div class="style-card-preview">
+                                    <img src="https://images.unsplash.com/photo-1508739773434-c26b3d09e071?w=220&h=300&fit=crop"
+                                        alt="Spring">
+                                </div>
                                 <span>Spring</span>
                             </div>
                             <div class="style-card"
                                 onclick="quickImageSend('Caricature trend exaggerated comic art style')">
-                                <div class="style-card-preview"
-                                    style="background:linear-gradient(135deg,#667eea,#764ba2)"></div>
+                                <div class="style-card-preview">
+                                    <img src="https://images.unsplash.com/photo-1635805737707-575885ab0820?w=220&h=300&fit=crop"
+                                        alt="Caricature">
+                                </div>
                                 <span>Caricature</span>
                             </div>
                             <div class="style-card" onclick="quickImageSend('Flower petals portrait delicate pastel')">
-                                <div class="style-card-preview"
-                                    style="background:linear-gradient(135deg,#f8b4d9,#f3a8d8)"></div>
+                                <div class="style-card-preview">
+                                    <img src="https://images.unsplash.com/photo-1588878237213-a2d39308dfdb?q=80&w=772&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
+                                        alt="Flower petals">
+                                </div>
                                 <span>Flower petals</span>
                             </div>
                             <div class="style-card"
                                 onclick="quickImageSend('Gold metallic statue ancient emperor portrait')">
-                                <div class="style-card-preview"
-                                    style="background:linear-gradient(135deg,#f6d365,#fda085)"></div>
+                                <div class="style-card-preview">
+                                    <img src="https://images.unsplash.com/photo-1599305445671-ac291c95aaa9?w=220&h=300&fit=crop"
+                                        alt="Gold">
+                                </div>
                                 <span>Gold</span>
                             </div>
                             <div class="style-card"
                                 onclick="quickImageSend('Crayon drawing colorful child illustration style')">
-                                <div class="style-card-preview"
-                                    style="background:linear-gradient(135deg,#84fab0,#8fd3f4)"></div>
+                                <div class="style-card-preview">
+                                    <img src="https://images.unsplash.com/photo-1513364776144-60967b0f800f?w=220&h=300&fit=crop"
+                                        alt="Crayon">
+                                </div>
                                 <span>Crayon</span>
                             </div>
                             <div class="style-card"
                                 onclick="quickImageSend('Watercolor soft painting artistic landscape')">
-                                <div class="style-card-preview"
-                                    style="background:linear-gradient(135deg,#a18cd1,#fbc2eb)"></div>
+                                <div class="style-card-preview">
+                                    <img src="https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5?w=220&h=300&fit=crop"
+                                        alt="Watercolor">
+                                </div>
                                 <span>Watercolor</span>
                             </div>
                         </div>
+
                     </div>
                     <div class="images-discover">
                         <h3 class="images-section-title">Discover something new</h3>
                         <div class="discover-grid" id="discoverGrid">
                             <div class="discover-card"
                                 onclick="quickImageSend('Portrait as a Roman emperor with laurel wreath, cinematic')">
-                                <div class="discover-thumb" style="background:linear-gradient(135deg,#232526,#414345)">
+                                <div class="discover-thumb">
+                                    <img src="https://images.unsplash.com/photo-1608889175123-8ee362201f81?w=104&h=104&fit=crop"
+                                        alt="Emperor">
                                 </div>
                                 <span>Me as an emperor</span>
                             </div>
                             <div class="discover-card"
                                 onclick="quickImageSend('Redecorate modern living room interior design')">
-                                <div class="discover-thumb" style="background:linear-gradient(135deg,#bdc3c7,#2c3e50)">
+                                <div class="discover-thumb">
+                                    <img src="https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=104&h=104&fit=crop"
+                                        alt="Room">
                                 </div>
                                 <span>Redecorate my room</span>
                             </div>
                             <div class="discover-card"
                                 onclick="quickImageSend('Realistic portrait of a dog reimagined as a human')">
-                                <div class="discover-thumb" style="background:linear-gradient(135deg,#f093fb,#f5576c)">
+                                <div class="discover-thumb">
+                                    <img src="https://images.unsplash.com/photo-1587300003388-59208cc962cb?w=104&h=104&fit=crop"
+                                        alt="Pet">
                                 </div>
                                 <span>Reimagine my pet as a human</span>
                             </div>
                             <div class="discover-card"
                                 onclick="quickImageSend('Stylish fashion editorial portrait photography')">
-                                <div class="discover-thumb" style="background:linear-gradient(135deg,#4facfe,#00f2fe)">
+                                <div class="discover-thumb">
+                                    <img src="https://images.unsplash.com/photo-1469334031218-e382a71b716b?w=104&h=104&fit=crop"
+                                        alt="Style">
                                 </div>
                                 <span>Style me</span>
                             </div>
                             <div class="discover-card" onclick="quickImageSend('Bowl cut hairstyle portrait funny')">
-                                <div class="discover-thumb" style="background:linear-gradient(135deg,#43e97b,#38f9d7)">
+                                <div class="discover-thumb">
+                                    <img src="https://images.unsplash.com/photo-1503454537195-1dcabb73ffb9?w=104&h=104&fit=crop"
+                                        alt="Bowl cut">
                                 </div>
                                 <span>Give them a bowl cut</span>
                             </div>
                             <div class="discover-card"
                                 onclick="quickImageSend('Black and white coloring page illustration for kids simple')">
-                                <div class="discover-thumb" style="background:linear-gradient(135deg,#e0e0e0,#aaa)">
+                                <div class="discover-thumb">
+                                    <img src="https://images.unsplash.com/photo-1513542789411-b6a5d4f31634?w=104&h=104&fit=crop"
+                                        alt="Coloring">
                                 </div>
                                 <span>Create a coloring page</span>
                             </div>
@@ -336,45 +367,49 @@
 
     <div class="mobile-drawer" id="mobileDrawer">
         <div class="mobile-drawer-head">
-            <img class="mobile-drawer-logo" src="/images/icon.png" alt="Vexa">
-            <button class="mobile-drawer-close" id="mobileDrawerClose">
-                <i class="fa-solid fa-xmark" style="font-size:15px"></i>
-            </button>
+            <span style="font-size:1.5rem;font-weight:700;color:var(--fg);letter-spacing:-0.02em">Vexa</span>
+            <div style="display:flex;align-items:center;gap:10px;">
+                <button class="icon-btn" id="mdSearchBtn"
+                    style="background:var(--surface2);border-radius:50%;width:36px;height:36px;">
+                    <i class="fa-solid fa-magnifying-glass" style="font-size:14px"></i>
+                </button>
+                <div id="mobileUserAvatarTop"
+                    style="width:34px;height:34px;border-radius:50%;background:#19c37d;display:flex;align-items:center;justify-content:center;font-size:0.8rem;font-weight:700;color:white;cursor:pointer;flex-shrink:0;overflow:hidden;">
+                    U</div>
+            </div>
         </div>
-        <div class="mobile-drawer-nav">
-            <button class="mobile-drawer-nav-item" id="mdNewChat">
-                <i class="fa-solid fa-pen-to-square"></i>
-                New chat
-            </button>
-            <button class="mobile-drawer-nav-item" id="mdSearch">
-                <i class="fa-solid fa-magnifying-glass"></i>
-                Search chats
-            </button>
-            <button class="mobile-drawer-nav-item" id="mdImages" onclick="navigate('/images')">
-                <i class="fa-solid fa-image"></i>
-                Images
+        <div class="mobile-drawer-grid">
+            <button class="mobile-grid-item" onclick="closeMobileDrawer();navigate('/images')">
+                <div class="mobile-grid-icon"><i class="fa-regular fa-image"></i></div>
             </button>
         </div>
         <div class="mobile-drawer-divider"></div>
         <div class="mobile-drawer-section-label">Recents</div>
         <div class="mobile-drawer-history" id="mobileHistoryList"></div>
-        <div class="mobile-drawer-foot">
-            <div id="mobileUserSection">
-                <div id="mobileUserRow" class="hidden">
-                    <button class="mobile-drawer-user" id="mobileUserBtn">
-                        <div class="mobile-drawer-user-avatar" id="mobileUserAvatar">U</div>
-                        <div class="mobile-drawer-user-info">
-                            <div class="mobile-drawer-user-name" id="mobileUserName">User</div>
-                            <div class="mobile-drawer-user-plan" id="mobileUserPlan">Free</div>
-                        </div>
-                    </button>
-                </div>
-                <div id="mobileLoginRow" class="mobile-login-row">
-                    <button class="mobile-login-row-btn" id="mobileLoginBtn">Log in</button>
-                </div>
-            </div>
-        </div>
     </div>
+
+    <button id="floatingChatBtn" onclick="closeMobileDrawer(); navigate('/new-chat')" style="
+        display:none;
+        position:fixed;
+        bottom:24px;
+        right:20px;
+        z-index:500;
+        background:var(--fg);
+        color:var(--bg);
+        border:none;
+        border-radius:50px;
+        padding:14px 24px;
+        font-size:1rem;
+        font-weight:600;
+        font-family:var(--font);
+        gap:10px;
+        align-items:center;
+        cursor:pointer;
+        box-shadow:0 4px 20px rgba(0,0,0,0.4);
+    ">
+        <i class="fa-solid fa-pen-to-square"></i>
+        Chat
+    </button>
 
     <div class="user-popover-overlay" id="userPopoverOverlay">
         <div class="user-popover" id="userPopover">
@@ -403,7 +438,6 @@
         <div class="search-modal" id="searchModal">
             <div class="search-modal-input-wrap">
                 <div class="search-input-box">
-                    <i class="fa-solid fa-magnifying-glass search-icon"></i>
                     <input type="text" id="searchInput" placeholder="Search chats..." autocomplete="off">
                     <button class="search-clear-btn hidden" id="searchClearBtn">
                         <i class="fa-solid fa-xmark"></i>
@@ -467,6 +501,7 @@
     <script src="/js/toast.js"></script>
     <script src="/js/settings.js"></script>
     <script src="/js/app.js"></script>
+    <script src="/js/vibrate.js"></script>
 </body>
 
 </html>

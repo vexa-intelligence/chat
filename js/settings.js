@@ -24,7 +24,8 @@ function initSettings() {
     });
 
     document.getElementById('clearChatsBtn')?.addEventListener('click', async () => {
-        if (confirm('Clear all chat history?')) {
+        const confirmed = await confirm('Clear all chat history?');
+        if (confirmed) {
             await clearAllChatsFromFirebase();
             chatSessions = [];
             currentSessionId = null;
@@ -152,10 +153,91 @@ function updateAllAvatars(avatarUrl) {
 }
 
 function applyTheme(theme) {
+    document.documentElement.classList.add('theme-switching');
+
     if (theme === 'system') {
         const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
         document.documentElement.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
     } else {
         document.documentElement.setAttribute('data-theme', theme);
     }
+
+    setTimeout(() => {
+        document.documentElement.classList.remove('theme-switching');
+    }, 300);
+
+    createThemeSwitchFeedback();
+}
+
+function initSystemThemeDetection() {
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+
+    if (localStorage.getItem('vexa_theme') === 'system') {
+        applyTheme('system');
+    }
+
+    mediaQuery.addEventListener('change', (e) => {
+        const currentTheme = localStorage.getItem('vexa_theme') || 'light';
+        if (currentTheme === 'system') {
+            applyTheme('system');
+        }
+    });
+
+    window.themeMediaQuery = mediaQuery;
+}
+
+function getEffectiveTheme() {
+    const savedTheme = localStorage.getItem('vexa_theme') || 'light';
+    if (savedTheme === 'system') {
+        return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+    return savedTheme;
+}
+
+function watchSystemThemeChanges() {
+    if (!window.themeMediaQuery) {
+        initSystemThemeDetection();
+    }
+
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) {
+            const currentTheme = localStorage.getItem('vexa_theme') || 'light';
+            if (currentTheme === 'system') {
+                const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+                const currentEffective = getEffectiveTheme();
+                if (systemTheme !== currentEffective) {
+                    applyTheme('system');
+                }
+            }
+        }
+    });
+}
+
+function createThemeSwitchFeedback() {
+    const feedback = document.createElement('div');
+    feedback.style.cssText = `
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        width: 0;
+        height: 0;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+        transform: translate(-50%, -50%);
+        pointer-events: none;
+        z-index: 9999;
+        transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+    `;
+
+    document.body.appendChild(feedback);
+
+    requestAnimationFrame(() => {
+        feedback.style.width = '200vw';
+        feedback.style.height = '200vw';
+        feedback.style.opacity = '0';
+    });
+
+    setTimeout(() => {
+        feedback.remove();
+    }, 600);
 }

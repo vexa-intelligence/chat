@@ -4,6 +4,7 @@ let currentSessionId = null;
 let currentModel = '';
 let currentModelLabel = 'Vexa';
 let isLoadingSession = false;
+let editingMsgIndex = null;
 
 const IMG_RE = /\b(generate|create|draw|make|paint|render|produce|design|imagine)\s+(an?\s+)?(image|picture|photo|illustration|artwork|painting|drawing|portrait|landscape|scene|wallpaper)\b|\b(image|picture|photo|illustration|artwork|painting|drawing|portrait|landscape|scene|wallpaper)\b/i;
 
@@ -20,6 +21,10 @@ function cleanImgPrompt(t) {
 
 function escHtml(t) {
     return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function filterLettersNumbers(t) {
+    return String(t).replace(/[^a-zA-Z0-9\s]/g, '').trim();
 }
 
 function fmtTableCell(cell) {
@@ -298,7 +303,90 @@ function attachCodeCopyListeners(row) {
     });
 }
 
-function addBubble(role, text) {
+function openMsgContextMenu(e, msgIndex) {
+    closeMsgContextMenu();
+    const session = chatSessions.find(s => s.id === currentSessionId);
+    const msg = session?.messages[msgIndex];
+    if (!msg) return;
+
+    const menu = document.createElement('div');
+    menu.className = 'msg-ctx-menu';
+    menu.id = 'msgCtxMenu';
+
+    const now = new Date();
+    const timeStr = now.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+
+    menu.innerHTML = `<div class="msg-ctx-time">${timeStr}</div>
+        <button class="msg-ctx-item" id="ctxCopy"><i class="fa-regular fa-copy" style="font-size:14px;width:16px"></i> Copy</button>
+        ${msg.role === 'user' ? `<button class="msg-ctx-item" id="ctxEdit"><i class="fa-solid fa-pencil" style="font-size:14px;width:16px"></i> Edit</button>` : ''}`;
+
+    document.body.appendChild(menu);
+
+    const menuW = menu.offsetWidth || 200;
+    const menuH = menu.offsetHeight || 100;
+    let left = e.clientX - menuW / 2;
+    left = Math.max(8, Math.min(left, window.innerWidth - menuW - 8));
+    let top = e.clientY - menuH - 12;
+    if (top < 8) top = e.clientY + 12;
+    menu.style.left = left + 'px';
+    menu.style.top = top + 'px';
+
+    menu.querySelector('#ctxCopy')?.addEventListener('click', () => {
+        const content = typeof msg.content === 'string' ? msg.content : '';
+        navigator.clipboard.writeText(content).catch(() => { });
+        closeMsgContextMenu();
+    });
+
+    menu.querySelector('#ctxEdit')?.addEventListener('click', () => {
+        startEditMessage(msgIndex);
+        closeMsgContextMenu();
+    });
+
+    setTimeout(() => document.addEventListener('click', closeMsgContextMenu, { once: true }), 10);
+}
+
+function closeMsgContextMenu() {
+    document.getElementById('msgCtxMenu')?.remove();
+}
+
+function startEditMessage(msgIndex) {
+    const session = chatSessions.find(s => s.id === currentSessionId);
+    if (!session) return;
+    const msg = session.messages[msgIndex];
+    if (!msg || msg.role !== 'user') return;
+
+    editingMsgIndex = msgIndex;
+    const inp = document.getElementById('inp');
+    const inputBox = document.getElementById('chatInputBox');
+    if (!inp || !inputBox) return;
+
+    document.getElementById('editIndicator')?.remove();
+
+    const indicator = document.createElement('div');
+    indicator.className = 'edit-indicator';
+    indicator.id = 'editIndicator';
+    indicator.innerHTML = `<i class="fa-solid fa-pencil" style="font-size:12px"></i><span>Edit message</span><button onclick="cancelEdit()" style="margin-left:auto;color:var(--muted);background:none;border:none;cursor:pointer;padding:2px 4px;"><i class="fa-solid fa-xmark"></i></button>`;
+    inputBox.insertBefore(indicator, inputBox.firstChild);
+
+    inp.value = typeof msg.content === 'string' ? msg.content : '';
+    inp.style.height = 'auto';
+    inp.style.height = Math.min(inp.scrollHeight, 160) + 'px';
+    document.getElementById('sbtn').disabled = !inp.value.trim();
+    inp.focus();
+}
+
+function cancelEdit() {
+    editingMsgIndex = null;
+    document.getElementById('editIndicator')?.remove();
+    const inp = document.getElementById('inp');
+    if (inp) {
+        inp.value = '';
+        inp.style.height = 'auto';
+        inp.dispatchEvent(new Event('input'));
+    }
+}
+
+function addBubble(role, text, msgIndex) {
     const feed = document.getElementById('feed');
     const row = document.createElement('div');
     row.className = 'msg-row ' + (role === 'user' ? 'user' : 'bot');
@@ -308,6 +396,20 @@ function addBubble(role, text) {
         bub.className = 'user-bub';
         bub.innerHTML = escHtml(text).replace(/\n/g, '<br>');
         row.appendChild(bub);
+
+        if (msgIndex !== undefined) {
+            let pressTimer;
+            bub.addEventListener('contextmenu', e => {
+                e.preventDefault();
+                openMsgContextMenu(e, msgIndex);
+            });
+            bub.addEventListener('touchstart', e => {
+                pressTimer = setTimeout(() => openMsgContextMenu(e.touches[0], msgIndex), 500);
+            }, { passive: true });
+            bub.addEventListener('touchend', () => clearTimeout(pressTimer));
+            bub.addEventListener('touchmove', () => clearTimeout(pressTimer));
+            bub.addEventListener('dblclick', e => openMsgContextMenu(e, msgIndex));
+        }
     } else {
         const bub = document.createElement('div');
         bub.className = 'bot-bub';
@@ -320,7 +422,7 @@ function addBubble(role, text) {
     }
 
     feed.appendChild(row);
-    scrollBottom();
+    if (role === 'bot')
     return row;
 }
 
@@ -333,7 +435,6 @@ function addLoading() {
     bub.innerHTML = '<div class="dots"><span></span><span></span><span></span></div>';
     row.appendChild(bub);
     feed.appendChild(row);
-    scrollBottom();
     return row;
 }
 
@@ -342,7 +443,6 @@ function swapText(row, text) {
     bub.innerHTML = `<div class="bot-bub-content">${fmt(text)}</div><div class="msg-actions"><button class="copy-text-btn" title="Copy message"><i class="fa-regular fa-copy"></i> Copy</button></div>`;
     attachCopyText(row, () => text);
     attachCodeCopyListeners(row);
-    scrollBottom();
 }
 
 function swapImage(row, url, prompt) {
@@ -359,12 +459,10 @@ function swapImage(row, url, prompt) {
     img.alt = prompt;
     img.style.cursor = 'pointer';
     img.onclick = () => openLightbox(url);
-    img.onload = scrollBottom;
     img.onerror = () => { bub.innerHTML = `<div class="bot-bub-content">${fmt('Could not load image.')}</div>`; };
     wrap.appendChild(cap);
     wrap.appendChild(img);
     bub.appendChild(wrap);
-    scrollBottom();
     saveMyImage(url, prompt);
 }
 
@@ -388,68 +486,68 @@ async function typewriterSwap(row, text, think) {
     const tokens = tokenize(text);
     let rendered = '';
     let inCodeBlock = false;
-    let codeBlockStart = -1;
+    let codeBlockStart = 0;
     let codeLang = '';
 
     for (let i = 0; i < tokens.length; i++) {
         rendered += tokens[i];
 
+        const tripleBacktickMatches = rendered.match(/```/g);
+        const tripleCount = tripleBacktickMatches ? tripleBacktickMatches.length : 0;
+
         if (rendered.includes('```')) {
-            const codeBlockMatches = rendered.match(/```([\w]*)\n?/g);
-            if (codeBlockMatches) {
-                const matchCount = codeBlockMatches.length;
+            if (!inCodeBlock && tripleCount % 2 === 1) {
+                inCodeBlock = true;
+                codeBlockStart = rendered.lastIndexOf('```');
+                const afterTick = rendered.substring(codeBlockStart + 3);
+                const langMatch = afterTick.match(/^(\w+)/);
+                codeLang = langMatch ? langMatch[1] : '';
 
-                if (matchCount % 2 === 1) {
-                    if (!inCodeBlock) {
-                        inCodeBlock = true;
-                        codeBlockStart = rendered.lastIndexOf('```');
-                        const langMatch = rendered.match(/```(\w*)/);
-                        codeLang = langMatch ? langMatch[1] : '';
+                if (!textEl.querySelector('.code-block-wrap:last-child') ||
+                    textEl.querySelector('.code-block-wrap:last-child').dataset.complete === 'true') {
+                    const codeWrapper = document.createElement('div');
+                    codeWrapper.className = 'code-block-wrap';
+                    codeWrapper.innerHTML = `
+                        <div class="code-block-header">
+                            <span class="code-lang-label">${escHtml(codeLang)}</span>
+                            <button class="copy-code-btn" title="Copy code">
+                                <i class="fa-regular fa-copy"></i> Copy
+                            </button>
+                        </div>
+                        <pre><code class="hljs language-${codeLang || 'plaintext'}"></code></pre>
+                    `;
+                    textEl.appendChild(codeWrapper);
 
-                        const codeWrapper = document.createElement('div');
-                        codeWrapper.className = 'code-block-wrap';
-                        codeWrapper.innerHTML = `
-                            <div class="code-block-header">
-                                <span class="code-lang-label">${escHtml(codeLang)}</span>
-                                <button class="copy-code-btn" title="Copy code">
-                                    <i class="fa-regular fa-copy"></i> Copy
-                                </button>
-                            </div>
-                            <pre><code class="hljs language-${codeLang || 'plaintext'}"></code></pre>
-                        `;
-                        textEl.appendChild(codeWrapper);
-
-                        const copyBtn = codeWrapper.querySelector('.copy-code-btn');
-                        copyBtn.addEventListener('click', () => {
-                            const code = codeWrapper.querySelector('code').innerText || codeWrapper.querySelector('code').textContent;
-                            navigator.clipboard.writeText(code).then(() => {
-                                copyBtn.innerHTML = '<i class="fa-solid fa-check"></i> Copied';
-                                setTimeout(() => { copyBtn.innerHTML = '<i class="fa-regular fa-copy"></i> Copy'; }, 2000);
-                            }).catch(() => {
-                                const ta = document.createElement('textarea');
-                                ta.value = code;
-                                document.body.appendChild(ta);
-                                ta.select();
-                                document.execCommand('copy');
-                                document.body.removeChild(ta);
-                                copyBtn.innerHTML = '<i class="fa-solid fa-check"></i> Copied';
-                                setTimeout(() => { copyBtn.innerHTML = '<i class="fa-regular fa-copy"></i> Copy'; }, 2000);
-                            });
+                    const copyBtn = codeWrapper.querySelector('.copy-code-btn');
+                    copyBtn.addEventListener('click', () => {
+                        const code = codeWrapper.querySelector('code').innerText || codeWrapper.querySelector('code').textContent;
+                        navigator.clipboard.writeText(code).then(() => {
+                            copyBtn.innerHTML = '<i class="fa-solid fa-check"></i> Copied';
+                            setTimeout(() => { copyBtn.innerHTML = '<i class="fa-regular fa-copy"></i> Copy'; }, 2000);
+                        }).catch(() => {
+                            const ta = document.createElement('textarea');
+                            ta.value = code;
+                            document.body.appendChild(ta);
+                            ta.select();
+                            document.execCommand('copy');
+                            document.body.removeChild(ta);
+                            copyBtn.innerHTML = '<i class="fa-solid fa-check"></i> Copied';
+                            setTimeout(() => { copyBtn.innerHTML = '<i class="fa-regular fa-copy"></i> Copy'; }, 2000);
                         });
-                    }
-                } else {
-                    if (inCodeBlock) {
-                        inCodeBlock = false;
-                        const codeContent = rendered.substring(codeBlockStart + 3 + codeLang.length).replace(/```[\s\S]*$/, '');
-                        const codeElement = textEl.querySelector('.code-block-wrap:last-child code');
-                        if (codeElement) {
-                            codeElement.textContent = codeContent;
-                            if (window.hljs && codeLang) {
-                                try {
-                                    const highlighted = window.hljs.highlight(codeContent, { language: detectLang(codeLang), ignoreIllegals: true }).value;
-                                    codeElement.innerHTML = highlighted;
-                                } catch { }
-                            }
+                    });
+                }
+            } else {
+                if (inCodeBlock) {
+                    inCodeBlock = false;
+                    const codeContent = rendered.substring(codeBlockStart + 3 + codeLang.length).replace(/```[\s\S]*$/, '');
+                    const codeElement = textEl.querySelector('.code-block-wrap:last-child code');
+                    if (codeElement) {
+                        codeElement.textContent = codeContent;
+                        if (window.hljs && codeLang) {
+                            try {
+                                const highlighted = window.hljs.highlight(codeContent, { language: detectLang(codeLang), ignoreIllegals: true }).value;
+                                codeElement.innerHTML = highlighted;
+                            } catch { }
                         }
                     }
                 }
@@ -476,7 +574,6 @@ async function typewriterSwap(row, text, think) {
             }
         }
 
-        scrollBottom();
         await sleep(tokens[i].length > 3 ? 5 : 14);
     }
 
@@ -490,7 +587,6 @@ async function typewriterSwap(row, text, think) {
     actionsEl.innerHTML = '<button class="copy-text-btn" title="Copy message"><i class="fa-regular fa-copy"></i> Copy</button>';
     bub.appendChild(actionsEl);
     attachCopyText(row, () => text);
-    scrollBottom();
 }
 
 function tokenize(text) {
@@ -544,8 +640,8 @@ async function generateEmptyTitle() {
             body: JSON.stringify({
                 model: currentModel || 'vexa',
                 messages: [
-                    { role: 'system', content: 'You are a helpful assistant. Be concise.' },
-                    { role: 'user', content: 'Generate a short question or prompt to start a conversation with an AI assistant, in 6 words or fewer. Only output the prompt.' }
+                    { role: 'system', content: 'You are a friendly, casual assistant. Keep things light, natural, and slightly playful. Be concise.' },
+                    { role: 'user', content: 'Generate a casual, relatable conversation starter someone might say to an AI. Max 6 words. Only output the prompt.' }
                 ]
             })
         });
@@ -756,8 +852,19 @@ async function sendText(text) {
         session = chatSessions.find(s => s.id === currentSessionId);
     }
 
+    if (editingMsgIndex !== null) {
+        session.messages = session.messages.slice(0, editingMsgIndex);
+        editingMsgIndex = null;
+        document.getElementById('editIndicator')?.remove();
+        const feed = document.getElementById('feed');
+        const rows = feed.querySelectorAll('.msg-row');
+        const keepRows = session.messages.length;
+        Array.from(rows).slice(keepRows).forEach(r => r.remove());
+    }
+
+    const msgIndex = session.messages.length;
     session.messages.push({ role: 'user', content: text });
-    addBubble('user', text);
+    addBubble('user', text, msgIndex);
     const loading = addLoading();
 
     let aiReply = null;
@@ -793,7 +900,13 @@ async function sendText(text) {
     const inp = document.getElementById('inp');
     if (sbtn) sbtn.disabled = !inp?.value.trim();
     if (inp) inp.focus();
-    scrollBottom();
+            const feed = document.getElementById('feed');
+            if (feed) {
+                feed.scrollTo({
+                    top: feed.scrollHeight,
+                    behavior: 'smooth'
+                });
+            }
 }
 
 async function sendImagePrompt(prompt) {
@@ -848,7 +961,13 @@ async function sendImagePrompt(prompt) {
     const inp = document.getElementById('inp');
     if (sbtn) sbtn.disabled = !inp?.value.trim();
     if (inp) inp.focus();
-    scrollBottom();
+            const feed = document.getElementById('feed');
+            if (feed) {
+                feed.scrollTo({
+                    top: feed.scrollHeight,
+                    behavior: 'smooth'
+                });
+            }
 }
 
 async function loadSessionIntoChat(session) {
@@ -893,7 +1012,7 @@ async function loadSessionIntoChat(session) {
             }
 
             if (content && typeof content === 'object' && content.type === 'image') {
-                const row = addBubble(msg.role === 'user' ? 'user' : 'bot', '');
+                const row = addBubble(msg.role === 'user' ? 'user' : 'bot', '', msg.role === 'user' ? index : undefined);
                 if (msg.role === 'assistant') {
                     const imageUrl = content.dataUrl || content.url;
                     if (imageUrl) {
@@ -901,7 +1020,7 @@ async function loadSessionIntoChat(session) {
                     }
                 }
             } else {
-                addBubble(msg.role === 'user' ? 'user' : 'bot', content);
+                addBubble(msg.role === 'user' ? 'user' : 'bot', content, msg.role === 'user' ? index : undefined);
             }
         });
         renderChatHistory();
@@ -909,6 +1028,13 @@ async function loadSessionIntoChat(session) {
         setTimeout(() => {
             const inp = document.getElementById('inp');
             if (inp) inp.focus();
+            const feed = document.getElementById('feed');
+            if (feed) {
+                feed.scrollTo({
+                    top: feed.scrollHeight,
+                    behavior: 'smooth'
+                });
+            }
         }, 100);
     } finally {
         isLoadingSession = false;
@@ -917,6 +1043,7 @@ async function loadSessionIntoChat(session) {
 
 async function newChat() {
     currentSessionId = null;
+    cancelEdit();
     window.history.pushState({}, '', '/new-chat');
     renderChatHistory();
     const feed = document.getElementById('feed');
@@ -926,17 +1053,18 @@ async function newChat() {
     const empty = document.createElement('div');
     empty.className = 'feed-empty';
     empty.id = 'feedEmpty';
-    const title = await generateEmptyTitle();
-    empty.innerHTML = `<div class="feed-empty-title"></div>`;
+    empty.innerHTML = `<div class="feed-empty-title">...</div>`;
     feed.appendChild(empty);
-
-    const titleEl = empty.querySelector('.feed-empty-title');
-    if (title && titleEl) {
-        await typewriterTitle(titleEl, title);
-    }
 
     showPageRaw('chat');
     document.getElementById('inp')?.focus();
+
+    generateEmptyTitle().then(title => {
+        const titleEl = document.querySelector('.feed-empty-title');
+        if (titleEl && title) {
+            typewriterTitle(titleEl, title);
+        }
+    });
 }
 
 function renderChatHistory() {
@@ -950,7 +1078,7 @@ function renderChatHistory() {
             item.className = 'history-item' + (s.id === currentSessionId ? ' active' : '');
             item.dataset.id = s.id;
             item.innerHTML = `
-                <div class="history-item-content">${escHtml(s.title)}</div>
+                <div class="history-item-content">${filterLettersNumbers(s.title)}</div>
                 <button class="history-item-del" title="Delete" data-id="${escHtml(s.id)}">
                     <i class="fa-solid fa-xmark"></i>
                 </button>
@@ -975,7 +1103,7 @@ function renderChatHistory() {
             item.className = 'history-item' + (s.id === currentSessionId ? ' active' : '');
             item.dataset.id = s.id;
             item.innerHTML = `
-                <div class="history-item-content">${escHtml(s.title)}</div>
+                <div class="history-item-content">${filterLettersNumbers(s.title)}</div>
                 <button class="history-item-del" title="Delete" data-id="${escHtml(s.id)}">
                     <i class="fa-solid fa-xmark"></i>
                 </button>
@@ -1065,28 +1193,6 @@ function doSend() {
     inp.style.height = 'auto';
     document.getElementById('sbtn').disabled = true;
     sendText(text);
-}
-
-async function newChat() {
-    currentSessionId = null;
-    window.history.pushState({}, '', '/new-chat');
-    renderChatHistory();
-    const feed = document.getElementById('feed');
-    feed.innerHTML = '';
-    const empty = document.createElement('div');
-    empty.className = 'feed-empty';
-    empty.id = 'feedEmpty';
-    const title = await generateEmptyTitle();
-    empty.innerHTML = `<div class="feed-empty-title"></div>`;
-    feed.appendChild(empty);
-
-    const titleEl = empty.querySelector('.feed-empty-title');
-    if (title && titleEl) {
-        await typewriterTitle(titleEl, title);
-    }
-
-    showPageRaw('chat');
-    document.getElementById('inp')?.focus();
 }
 
 function resetSearchResults() {
@@ -1217,3 +1323,4 @@ function openSearchModal() {
     input.focus();
     resetSearchResults();
 }
+

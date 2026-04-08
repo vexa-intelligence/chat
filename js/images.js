@@ -399,7 +399,7 @@ function closeImageOutput() {
 async function quickImageSend(prompt) {
   const inp = document.getElementById('imagePromptInp');
   if (inp) inp.value = prompt;
-  await newChat();
+  newChat();
   await sendImagePrompt(prompt);
 }
 
