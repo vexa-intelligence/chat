@@ -723,7 +723,7 @@ async function sendText(text) {
     busy = true;
     showPageRaw('chat');
     const feedEmpty = document.getElementById('feedEmpty');
-    if (feedEmpty) feedEmpty.style.display = 'none';
+    if (feedEmpty) feedEmpty.remove();
 
     if (!currentUser) {
         const feed = document.getElementById('feed');

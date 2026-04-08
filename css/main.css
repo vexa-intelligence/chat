@@ -830,6 +830,9 @@ select {
     left: 0;
     right: 0;
     padding: 16px 24px 20px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    max-width: 600px;
+    margin: 0 auto;
 }
 
 .input-box {
