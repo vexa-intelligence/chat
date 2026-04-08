@@ -423,7 +423,7 @@ function addBubble(role, text, msgIndex) {
 
     feed.appendChild(row);
     if (role === 'bot')
-    return row;
+        return row;
 }
 
 function addLoading() {
@@ -479,9 +479,6 @@ async function typewriterSwap(row, text, think) {
     const textEl = document.createElement('div');
     textEl.className = 'bot-bub-content';
     bub.appendChild(textEl);
-    const cur = document.createElement('span');
-    cur.className = 'tw-cur';
-    textEl.appendChild(cur);
 
     const tokens = tokenize(text);
     let rendered = '';
@@ -556,7 +553,6 @@ async function typewriterSwap(row, text, think) {
 
         if (!inCodeBlock) {
             textEl.innerHTML = fmt(rendered);
-            textEl.appendChild(cur);
         } else {
             const codeElement = textEl.querySelector('.code-block-wrap:last-child code');
             if (codeElement) {
@@ -570,14 +566,15 @@ async function typewriterSwap(row, text, think) {
                         codeElement.innerHTML = highlighted;
                     } catch { }
                 }
-                codeElement.appendChild(cur);
             }
+        }
+
+        if (tokens[i].trim() && typeof haptic === 'function') {
+            haptic();
         }
 
         await sleep(tokens[i].length > 3 ? 5 : 14);
     }
-
-    cur.remove();
 
     textEl.innerHTML = fmt(rendered);
     attachCodeCopyListeners(row);
@@ -900,13 +897,13 @@ async function sendText(text) {
     const inp = document.getElementById('inp');
     if (sbtn) sbtn.disabled = !inp?.value.trim();
     if (inp) inp.focus();
-            const feed = document.getElementById('feed');
-            if (feed) {
-                feed.scrollTo({
-                    top: feed.scrollHeight,
-                    behavior: 'smooth'
-                });
-            }
+    const feed = document.getElementById('feed');
+    if (feed) {
+        feed.scrollTo({
+            top: feed.scrollHeight,
+            behavior: 'smooth'
+        });
+    }
 }
 
 async function sendImagePrompt(prompt) {
@@ -961,13 +958,13 @@ async function sendImagePrompt(prompt) {
     const inp = document.getElementById('inp');
     if (sbtn) sbtn.disabled = !inp?.value.trim();
     if (inp) inp.focus();
-            const feed = document.getElementById('feed');
-            if (feed) {
-                feed.scrollTo({
-                    top: feed.scrollHeight,
-                    behavior: 'smooth'
-                });
-            }
+    const feed = document.getElementById('feed');
+    if (feed) {
+        feed.scrollTo({
+            top: feed.scrollHeight,
+            behavior: 'smooth'
+        });
+    }
 }
 
 async function loadSessionIntoChat(session) {
