@@ -15,6 +15,7 @@
     document.body.appendChild(l);
 
     const haptic = () => l.click();
+    window.haptic = haptic;
 
     const SELECTOR = [
         'a[href]', 'button', 'input', 'select', 'textarea', 'label', 'summary',

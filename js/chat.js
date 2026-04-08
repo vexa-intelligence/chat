@@ -569,8 +569,8 @@ async function typewriterSwap(row, text, think) {
             }
         }
 
-        if (tokens[i].trim() && typeof haptic === 'function') {
-            haptic();
+        if (tokens[i].trim() && window.haptic) {
+            window.haptic();
         }
 
         await sleep(tokens[i].length > 3 ? 5 : 14);

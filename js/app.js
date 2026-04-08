@@ -191,15 +191,38 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    setTimeout(() => {
+    const focusInput = () => {
         const input = document.getElementById('inp');
-        if (input && currentPage === 'chat') input.focus();
-    }, 100);
+        if (input && currentPage === 'chat') {
+            input.focus();
+            return true;
+        }
+        return false;
+    };
+
+    let focusAttempts = 0;
+    const maxFocusAttempts = 10;
+
+    const tryFocusInput = () => {
+        if (focusAttempts >= maxFocusAttempts) return;
+        if (focusInput()) return;
+        focusAttempts++;
+        setTimeout(tryFocusInput, 100);
+    };
+
+    tryFocusInput();
+
+    window.addEventListener('load', () => {
+        setTimeout(tryFocusInput, 200);
+    });
+
+    document.addEventListener('touchstart', () => {
+        if (!focusInput()) {
+            setTimeout(tryFocusInput, 50);
+        }
+    }, { once: true, passive: true });
 
     initGlobalFocusManagement();
-
-    const sidebarCollapse = document.getElementById('sidebarCollapse');
-    if (sidebarCollapse) sidebarCollapse.addEventListener('click', toggleSidebar);
 
     const topbarExpand = document.getElementById('topbarExpand');
     if (topbarExpand) topbarExpand.addEventListener('click', toggleSidebar);
