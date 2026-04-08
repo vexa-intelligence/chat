@@ -81,13 +81,15 @@ function updateSettingsAccountUI(loggedIn) {
                 </div>
                 <button class="account-logout-btn" id="logoutBtn">Log out</button>
             </div>
-            <div class="avatar-upload-container">
-                <label class="avatar-upload-label">Profile Picture</label>
-                <input type="file" id="avatarUpload" accept="image/*" class="avatar-upload-input">
-                <div class="avatar-change-hint">Choose a new profile picture (JPG, PNG, GIF)</div>
-            </div>`;
+            <input type="file" id="avatarUpload" accept="image/*" class="avatar-upload-input" style="display:none;">`;
         document.getElementById('logoutBtn').addEventListener('click', signOut);
         document.getElementById('avatarUpload').addEventListener('change', handleAvatarUpload);
+        const avatarImg = document.querySelector('.account-avatar-img');
+        if (avatarImg) {
+            avatarImg.addEventListener('click', () => {
+                document.getElementById('avatarUpload').click();
+            });
+        }
     } else {
         el.innerHTML = `
             <div class="account-not-logged">
@@ -128,17 +130,6 @@ async function handleAvatarUpload(e) {
         updateSettingsAccountUI(true);
         await saveUserPrefToFirebase('avatar', cloudinaryUrl);
 
-        const uploadInput = document.getElementById('avatarUpload');
-        const hint = document.querySelector('.avatar-change-hint');
-        if (hint) {
-            hint.textContent = 'Profile picture updated successfully!';
-            hint.style.color = '#10b981';
-            setTimeout(() => {
-                hint.textContent = 'Choose a new profile picture (JPG, PNG, GIF)';
-                hint.style.color = '';
-            }, 3000);
-        }
-
     } catch (error) {
         console.error('Avatar upload error:', error);
 
@@ -151,16 +142,6 @@ async function handleAvatarUpload(e) {
             await saveUserPrefToFirebase('avatar', avatarData);
         };
         reader.readAsDataURL(file);
-
-        const hint = document.querySelector('.avatar-change-hint');
-        if (hint) {
-            hint.textContent = 'Upload failed, saved locally';
-            hint.style.color = '#ef4444';
-            setTimeout(() => {
-                hint.textContent = 'Choose a new profile picture (JPG, PNG, GIF)';
-                hint.style.color = '';
-            }, 3000);
-        }
     }
 }
 

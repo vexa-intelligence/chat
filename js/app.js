@@ -1,5 +1,17 @@
 let currentPage = 'chat';
 
+function showPageRaw(name) {
+    document.querySelectorAll('.page').forEach(page => {
+        page.classList.remove('active');
+    });
+
+    const targetPage = document.getElementById(`page-${name}`);
+    if (targetPage) {
+        targetPage.classList.add('active');
+        currentPage = name;
+    }
+}
+
 function showPage(name) {
     const pathMap = { chat: '/', images: '/images', models: '/models' };
     const path = pathMap[name] || '/';
@@ -43,7 +55,11 @@ function navigate(path, pushState = true) {
 }
 
 function toggleSidebar() {
-    if (window.innerWidth <= 680) {
+    // Check if mobile (width <= 680px) OR landscape mode with small height
+    const isMobile = window.innerWidth <= 680;
+    const isLandscapeMobile = window.innerHeight <= 600 && window.innerWidth > window.innerHeight;
+
+    if (isMobile || isLandscapeMobile) {
         openMobileDrawer();
     } else {
         const sidebar = document.getElementById('sidebar');
@@ -158,6 +174,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initModels();
     initSettings();
     initCustomAlert();
+    initToast();
     initMobileSwipeToDelete();
 
     loadModels();
@@ -174,6 +191,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (input && currentPage === 'chat') input.focus();
     }, 100);
 
+    // Global focus management - keep input always focused
+    initGlobalFocusManagement();
+
     document.getElementById('sidebarCollapse').addEventListener('click', toggleSidebar);
     document.getElementById('topbarExpand').addEventListener('click', toggleSidebar);
     document.getElementById('newChatBtn').addEventListener('click', newChat);
@@ -189,16 +209,25 @@ document.addEventListener('DOMContentLoaded', () => {
         closeMobileDrawer();
         openSearchModal();
     });
-    document.getElementById('mdImages').addEventListener('click', () => showPage('images'));
-    document.getElementById('mdModels').addEventListener('click', () => showPage('models'));
-    document.getElementById('mobileLoginBtn').addEventListener('click', () => {
+    document.getElementById('mdImages').addEventListener('click', () => {
+        showPage('images');
         closeMobileDrawer();
+    });
+    document.getElementById('mdModels').addEventListener('click', () => {
+        showPage('models');
+        closeMobileDrawer();
+    });
+    document.getElementById('mobileLoginBtn').addEventListener('click', () => {
         openAuthOverlay();
     });
 
     document.getElementById('mobileUserBtn')?.addEventListener('click', e => {
         e.stopPropagation();
-        closeMobileDrawer();
+        openUserPopover();
+    });
+
+    document.getElementById('userInfo')?.addEventListener('click', e => {
+        e.stopPropagation();
         openUserPopover();
     });
 
@@ -272,30 +301,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const attachBtn = document.getElementById('attachBtn');
     if (attachBtn) {
         attachBtn.addEventListener('click', () => {
-            const input = document.createElement('input');
-            input.type = 'file';
-            input.accept = 'image/*,.txt,.pdf,.doc,.docx';
-            input.onchange = (e) => {
-                const file = e.target.files[0];
-                if (!file) return;
-
-                if (file.type.startsWith('image/')) {
-                    const reader = new FileReader();
-                    reader.onload = (event) => {
-                        if (inp) {
-                            inp.value += `\n[Image: ${file.name}]`;
-                            inp.dispatchEvent(new Event('input'));
-                        }
-                    };
-                    reader.readAsDataURL(file);
-                } else {
-                    if (inp) {
-                        inp.value += `\n[File: ${file.name}]`;
-                        inp.dispatchEvent(new Event('input'));
-                    }
-                }
-            };
-            input.click();
+            toast.comingSoon("File attachments");
         });
     }
 
@@ -359,4 +365,64 @@ document.addEventListener('keydown', e => {
         const backdrop = document.getElementById('inputBackdrop');
         if (backdrop?.classList.contains('visible')) hideInputOverlay();
     }
+
+    // Global focus management - refocus input on any key press that's not already focused
+    const inp = document.getElementById('inp');
+    if (inp && document.activeElement !== inp && currentPage === 'chat' &&
+        !e.ctrlKey && !e.metaKey && !e.altKey &&
+        e.key.length === 1 && !e.target.matches('input, textarea, select, button, a')) {
+        e.preventDefault();
+        inp.focus();
+    }
 });
+
+function initGlobalFocusManagement() {
+    const inp = document.getElementById('inp');
+    if (!inp) return;
+
+    // Focus input when clicking anywhere on the page (except other inputs/buttons)
+    document.addEventListener('click', (e) => {
+        if (currentPage === 'chat' &&
+            !e.target.matches('input, textarea, select, button, a') &&
+            !e.target.closest('input, textarea, select, button, a') &&
+            document.activeElement !== inp) {
+            setTimeout(() => inp.focus(), 0);
+        }
+    });
+
+    // Focus input when switching to chat page
+    const originalShowPageRaw = showPageRaw;
+    showPageRaw = function (name) {
+        originalShowPageRaw(name);
+        if (name === 'chat') {
+            setTimeout(() => {
+                if (inp) inp.focus();
+            }, 100);
+        }
+    };
+
+    // Focus input on window focus (when user returns to the tab)
+    window.addEventListener('focus', () => {
+        if (currentPage === 'chat' && inp) {
+            setTimeout(() => inp.focus(), 100);
+        }
+    });
+
+    // Focus input on visibility change (when user returns to the app)
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden && currentPage === 'chat' && inp) {
+            setTimeout(() => inp.focus(), 100);
+        }
+    });
+
+    // Ensure input stays focused after sending messages
+    const originalDoSend = window.doSend;
+    if (originalDoSend) {
+        window.doSend = function () {
+            originalDoSend.apply(this, arguments);
+            setTimeout(() => {
+                if (inp && currentPage === 'chat') inp.focus();
+            }, 100);
+        };
+    }
+}

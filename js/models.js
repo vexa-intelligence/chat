@@ -127,14 +127,29 @@ function closeModelPicker() {
 }
 
 function initModels() {
-    document.getElementById('modelSelectBtn').addEventListener('click', e => {
-        e.stopPropagation();
-        openModelPicker();
-    });
-    document.getElementById('topbarTitle').addEventListener('click', e => {
-        e.stopPropagation();
-        openModelPicker();
-    });
-    document.getElementById('modelPickerOverlay').addEventListener('click', closeModelPicker);
-    document.getElementById('modelPicker').addEventListener('click', e => e.stopPropagation());
+    const modelSelectBtn = document.getElementById('modelSelectBtn');
+    if (modelSelectBtn) {
+        modelSelectBtn.addEventListener('click', e => {
+            e.stopPropagation();
+            openModelPicker();
+        });
+    }
+
+    const topbarTitle = document.getElementById('topbarTitle');
+    if (topbarTitle) {
+        topbarTitle.addEventListener('click', e => {
+            e.stopPropagation();
+            openModelPicker();
+        });
+    }
+
+    const modelPickerOverlay = document.getElementById('modelPickerOverlay');
+    if (modelPickerOverlay) {
+        modelPickerOverlay.addEventListener('click', closeModelPicker);
+    }
+
+    const modelPicker = document.getElementById('modelPicker');
+    if (modelPicker) {
+        modelPicker.addEventListener('click', e => e.stopPropagation());
+    }
 }

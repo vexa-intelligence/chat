@@ -16,7 +16,6 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-storage-compat.js"></script>
     <script src="https://upload-widget.cloudinary.com/global/all.js" type="text/javascript"></script>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link rel="manifest" href="/manifest.json">
 </head>
 
@@ -54,37 +53,36 @@
                         </button>
                     </div>
                     <button class="new-chat-btn" id="newChatBtn">
-                        <i class="fa-solid fa-pen-to-square" style="color:var(--muted);font-size:13px"></i>
+                        <i class="fa-solid fa-pen-to-square"></i>
                         New chat
                     </button>
                     <button class="sidebar-nav-item" id="navSearch">
-                        <i class="fa-solid fa-magnifying-glass" style="color:var(--muted);font-size:13px"></i>
+                        <i class="fa-solid fa-magnifying-glass"></i>
                         Search chats
                     </button>
                     <button class="sidebar-nav-item" id="navImages" onclick="navigate('/images')">
-                        <i class="fa-solid fa-image" style="color:var(--muted);font-size:13px"></i>
+                        <i class="fa-solid fa-image"></i>
                         Images
                     </button>
                     <button class="sidebar-nav-item" id="navModels" onclick="navigate('/models')">
-                        <i class="fa-solid fa-microchip" style="color:var(--muted);font-size:13px"></i>
+                        <i class="fa-solid fa-microchip"></i>
                         Models
                     </button>
                 </div>
+
                 <div class="sidebar-history" id="sidebarHistory">
                     <div class="history-section-label">Recents</div>
                     <div id="chatHistoryList"></div>
                 </div>
+
                 <div class="sidebar-bottom">
                     <div id="userSection" class="user-section">
                         <div class="user-info hidden" id="userInfo">
                             <div class="user-avatar" id="userAvatar">U</div>
                             <div class="user-details">
                                 <div class="user-name" id="userName">User</div>
-                                <div class="user-plan" id="userPlan">Free plan</div>
+                                <div class="user-plan" id="userPlan">Free</div>
                             </div>
-                            <button class="icon-btn" id="settingsBtn" title="Settings">
-                                <i class="fa-solid fa-gear" style="font-size:14px"></i>
-                            </button>
                         </div>
                         <div class="auth-prompt" id="authPrompt">
                             <p class="auth-prompt-text">Get responses tailored to you</p>
@@ -106,9 +104,6 @@
                     <i class="fa-solid fa-chevron-down" style="font-size:10px;color:var(--muted)"></i>
                 </div>
                 <div class="topbar-right">
-                    <button class="icon-btn" id="topbarSettingsBtn" title="Settings">
-                        <i class="fa-solid fa-gear" style="font-size:15px"></i>
-                    </button>
                     <button class="topbar-login-btn hidden" id="topbarLoginBtn">Log in</button>
                 </div>
             </div>
@@ -123,29 +118,20 @@
                     <div class="input-backdrop" id="inputBackdrop"></div>
                     <div class="input-area">
                         <div class="input-box" id="chatInputBox">
-                            <button class="input-tool-btn attach-btn-left" id="attachBtn" title="Attach">
-                                <i class="fa-solid fa-plus" style="font-size:15px"></i>
-                            </button>
-                            <textarea id="inp" rows="1" placeholder="Ask anything" autocomplete="off"
-                                spellcheck="true"></textarea>
-                            <div class="input-row">
-                                <div class="input-left">
-                                    <button class="model-select-btn" id="modelSelectBtn">
-                                        <span id="modelSelectLabel">Vexa</span>
-                                        <i class="fa-solid fa-chevron-down" style="font-size:9px"></i>
-                                    </button>
-                                </div>
-                                <div class="input-right">
-                                    <button class="input-tool-btn" id="voiceBtn" title="Voice">
-                                        <i class="fa-solid fa-microphone" style="font-size:15px"></i>
-                                    </button>
-                                    <button id="sbtn" class="send-btn" disabled>
-                                        <i class="fa-solid fa-arrow-up" style="font-size:13px"></i>
-                                    </button>
-                                </div>
+                            <div class="input-row-inline">
+                                <button class="input-tool-btn" id="attachBtn" title="Attach">
+                                    <i class="fa-solid fa-plus" style="font-size:15px"></i>
+                                </button>
+                                <textarea id="inp" rows="1" placeholder="Ask anything" autocomplete="off"
+                                    spellcheck="true"></textarea>
+                                <button class="input-tool-btn" id="voiceBtn" title="Voice">
+                                    <i class="fa-solid fa-microphone" style="font-size:15px"></i>
+                                </button>
+                                <button id="sbtn" class="send-btn" disabled>
+                                    <i class="fa-solid fa-arrow-up" style="font-size:13px"></i>
+                                </button>
                             </div>
                         </div>
-                        <div class="input-disclaimer">Vexa can make mistakes. Verify important info.</div>
                     </div>
                 </div>
             </div>
@@ -162,17 +148,9 @@
                             </button>
                             <input type="text" id="imagePromptInp" placeholder="Describe a new image"
                                 class="image-gen-input">
-                            <button class="img-gen-voice-btn" title="Voice">
-                                <i class="fa-solid fa-microphone" style="font-size:15px"></i>
-                            </button>
                             <button class="img-gen-send" id="imgGenSend">
                                 <i class="fa-solid fa-arrow-up" style="font-size:13px"></i>
                             </button>
-                        </div>
-                        <div class="image-model-row">
-                            <select id="imageModelSelect" class="image-model-select">
-                                <option value="hd">HD</option>
-                            </select>
                         </div>
                     </div>
                     <div class="images-styles">
@@ -272,7 +250,6 @@
             </div>
 
             <div class="page" id="page-settings"></div>
-
         </div>
     </div>
 
@@ -280,18 +257,10 @@
         <div class="settings-modal" id="settingsModal">
             <div class="settings-modal-sidebar">
                 <div class="settings-modal-brand">Settings</div>
-                <button class="settings-tab active" data-section="general">
-                    General
-                </button>
-                <button class="settings-tab" data-section="account">
-                    Account
-                </button>
-                <button class="settings-tab" data-section="appearance">
-                    Appearance
-                </button>
-                <button class="settings-tab" data-section="data">
-                    Data controls
-                </button>
+                <button class="settings-tab active" data-section="general">General</button>
+                <button class="settings-tab" data-section="account">Account</button>
+                <button class="settings-tab" data-section="appearance">Appearance</button>
+                <button class="settings-tab" data-section="data">Data</button>
             </div>
             <div class="settings-modal-body">
                 <button class="settings-modal-close" id="settingsModalClose">
@@ -367,7 +336,7 @@
                         <div class="mpi-name">Auto</div>
                         <div class="mpi-sub">Auto-selected</div>
                     </div>
-                    <i class="fa-solid fa-check mpi-check" style="font-size:13px"></i>
+                    <i class="fa-solid fa-check mpi-check"></i>
                 </div>
             </div>
         </div>
@@ -384,19 +353,19 @@
         </div>
         <div class="mobile-drawer-nav">
             <button class="mobile-drawer-nav-item" id="mdNewChat">
-                <i class="fa-solid fa-pen-to-square" style="font-size:15px"></i>
+                <i class="fa-solid fa-pen-to-square"></i>
                 New chat
             </button>
             <button class="mobile-drawer-nav-item" id="mdSearch">
-                <i class="fa-solid fa-magnifying-glass" style="font-size:15px"></i>
+                <i class="fa-solid fa-magnifying-glass"></i>
                 Search chats
             </button>
             <button class="mobile-drawer-nav-item" id="mdImages" onclick="navigate('/images')">
-                <i class="fa-solid fa-image" style="font-size:15px"></i>
+                <i class="fa-solid fa-image"></i>
                 Images
             </button>
             <button class="mobile-drawer-nav-item" id="mdModels" onclick="navigate('/models')">
-                <i class="fa-solid fa-microchip" style="font-size:15px"></i>
+                <i class="fa-solid fa-microchip"></i>
                 Models
             </button>
         </div>
@@ -500,7 +469,6 @@
         }
 
         let _pendingChatId = null;
-
         window.addEventListener('popstate', () => navigate(window.location.pathname, false));
     </script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
@@ -510,6 +478,8 @@
     <script src="/js/chat.js"></script>
     <script src="/js/images.js"></script>
     <script src="/js/models.js"></script>
+    <div class="toast-container" id="toastContainer"></div>
+    <script src="/js/toast.js"></script>
     <script src="/js/settings.js"></script>
     <script src="/js/app.js"></script>
 </body>
