@@ -1,3 +1,29 @@
+function getVexaSettings() {
+    try { return JSON.parse(localStorage.getItem('vexa_settings') || '{}'); } catch { return {}; }
+}
+
+function setVexaSetting(key, value) {
+    const s = getVexaSettings();
+    s[key] = value;
+    localStorage.setItem('vexa_settings', JSON.stringify(s));
+    if (currentUser && window.firebaseDB) {
+        window.firebaseDB.collection('user_preferences').doc(currentUser.uid)
+            .set({ settings: s }, { merge: true }).catch(() => { });
+    }
+}
+
+async function loadVexaSettingsFromFirebase() {
+    if (!currentUser || !window.firebaseDB) return;
+    try {
+        const doc = await window.firebaseDB.collection('user_preferences').doc(currentUser.uid).get();
+        if (doc.exists && doc.data().settings) {
+            const remote = doc.data().settings;
+            const merged = Object.assign(getVexaSettings(), remote);
+            localStorage.setItem('vexa_settings', JSON.stringify(merged));
+        }
+    } catch { }
+}
+
 async function populateAiThemesInDropdown() {
     const themeSelect = document.getElementById('themeSelect');
     if (!themeSelect) return;
@@ -27,6 +53,198 @@ async function populateAiThemesInDropdown() {
     }
 
     themeSelect.value = currentValue;
+}
+
+function applyVexaSettingsToUI() {
+    const s = getVexaSettings();
+
+    const sendOnEnterToggle = document.getElementById('sendOnEnterToggle');
+    if (sendOnEnterToggle) sendOnEnterToggle.checked = s.sendOnEnter !== false;
+
+    const autoTitleToggle = document.getElementById('autoTitleToggle');
+    if (autoTitleToggle) autoTitleToggle.checked = s.autoTitle !== false;
+
+    const showTimestampsToggle = document.getElementById('showTimestampsToggle');
+    if (showTimestampsToggle) showTimestampsToggle.checked = !!s.showTimestamps;
+
+    const streamingToggle = document.getElementById('streamingToggle');
+    if (streamingToggle) streamingToggle.checked = s.streaming !== false;
+
+    const memoryToggle = document.getElementById('memoryToggle');
+    if (memoryToggle) memoryToggle.checked = !!s.memoryEnabled;
+
+    const responseLengthSelect = document.getElementById('responseLengthSelect');
+    if (responseLengthSelect) responseLengthSelect.value = s.responseLength || 'balanced';
+
+    const responseLangSelect = document.getElementById('responseLangSelect');
+    if (responseLangSelect) responseLangSelect.value = s.responseLang || 'auto';
+
+    const systemPromptTextarea = document.getElementById('systemPromptTextarea');
+    if (systemPromptTextarea) systemPromptTextarea.value = s.systemPrompt || '';
+
+    const defaultModelSelect = document.getElementById('defaultModelSettingSelect');
+    if (defaultModelSelect) defaultModelSelect.value = s.defaultModel || '';
+
+    if (s.showTimestamps) {
+        document.body.classList.add('show-timestamps');
+    } else {
+        document.body.classList.remove('show-timestamps');
+    }
+}
+
+function initSettingsControls() {
+    const sendOnEnterToggle = document.getElementById('sendOnEnterToggle');
+    if (sendOnEnterToggle) {
+        sendOnEnterToggle.addEventListener('change', () => {
+            setVexaSetting('sendOnEnter', sendOnEnterToggle.checked);
+        });
+    }
+
+    const autoTitleToggle = document.getElementById('autoTitleToggle');
+    if (autoTitleToggle) {
+        autoTitleToggle.addEventListener('change', () => {
+            setVexaSetting('autoTitle', autoTitleToggle.checked);
+        });
+    }
+
+    const showTimestampsToggle = document.getElementById('showTimestampsToggle');
+    if (showTimestampsToggle) {
+        showTimestampsToggle.addEventListener('change', () => {
+            setVexaSetting('showTimestamps', showTimestampsToggle.checked);
+            if (showTimestampsToggle.checked) {
+                document.body.classList.add('show-timestamps');
+            } else {
+                document.body.classList.remove('show-timestamps');
+            }
+        });
+    }
+
+    const streamingToggle = document.getElementById('streamingToggle');
+    if (streamingToggle) {
+        streamingToggle.addEventListener('change', () => {
+            setVexaSetting('streaming', streamingToggle.checked);
+        });
+    }
+
+    const memoryToggle = document.getElementById('memoryToggle');
+    if (memoryToggle) {
+        memoryToggle.addEventListener('change', () => {
+            setVexaSetting('memoryEnabled', memoryToggle.checked);
+        });
+    }
+
+    const responseLengthSelect = document.getElementById('responseLengthSelect');
+    if (responseLengthSelect) {
+        responseLengthSelect.addEventListener('change', () => {
+            setVexaSetting('responseLength', responseLengthSelect.value);
+        });
+    }
+
+    const responseLangSelect = document.getElementById('responseLangSelect');
+    if (responseLangSelect) {
+        responseLangSelect.addEventListener('change', () => {
+            setVexaSetting('responseLang', responseLangSelect.value);
+        });
+    }
+
+    const systemPromptTextarea = document.getElementById('systemPromptTextarea');
+    const saveSystemPromptBtn = document.getElementById('saveSystemPromptBtn');
+    if (saveSystemPromptBtn && systemPromptTextarea) {
+        saveSystemPromptBtn.addEventListener('click', () => {
+            setVexaSetting('systemPrompt', systemPromptTextarea.value.trim());
+            saveSystemPromptBtn.textContent = 'Saved!';
+            setTimeout(() => { saveSystemPromptBtn.textContent = 'Save'; }, 2000);
+        });
+    }
+
+    const defaultModelSettingSelect = document.getElementById('defaultModelSettingSelect');
+    if (defaultModelSettingSelect) {
+        defaultModelSettingSelect.addEventListener('change', () => {
+            setVexaSetting('defaultModel', defaultModelSettingSelect.value);
+            const label = defaultModelSettingSelect.options[defaultModelSettingSelect.selectedIndex]?.text || '';
+            if (defaultModelSettingSelect.value) {
+                setModel(defaultModelSettingSelect.value, label);
+            }
+        });
+    }
+
+    const exportChatsBtn = document.getElementById('exportChatsBtn');
+    if (exportChatsBtn) {
+        exportChatsBtn.addEventListener('click', exportAllChats);
+    }
+
+    const clearChatsSettingsBtn = document.getElementById('clearChatsSettingsBtn');
+    if (clearChatsSettingsBtn) {
+        clearChatsSettingsBtn.addEventListener('click', async () => {
+            const confirmed = await confirm('Delete all chat history? This cannot be undone.');
+            if (confirmed) {
+                await clearAllChatsFromFirebase();
+                chatSessions = [];
+                currentSessionId = null;
+                renderChatHistory();
+                newChat();
+            }
+        });
+    }
+}
+
+function populateDefaultModelSelect() {
+    const sel = document.getElementById('defaultModelSettingSelect');
+    if (!sel || !allTextModels || !allTextModels.length) return;
+    sel.innerHTML = '<option value="">Auto</option>';
+    allTextModels.forEach(([id, info]) => {
+        const o = document.createElement('option');
+        o.value = id;
+        o.textContent = info.label || id;
+        sel.appendChild(o);
+    });
+    const s = getVexaSettings();
+    sel.value = s.defaultModel || '';
+}
+
+function getUsageStats() {
+    const totalSessions = chatSessions ? chatSessions.length : 0;
+    const totalMessages = chatSessions
+        ? chatSessions.reduce((acc, s) => acc + (s.messages ? s.messages.filter(m => m.role === 'user').length : 0), 0)
+        : 0;
+    const savedImagesCount = typeof savedImages !== 'undefined' ? savedImages.length : 0;
+    return { totalSessions, totalMessages, savedImagesCount };
+}
+
+function renderUsageStats() {
+    const el = document.getElementById('usageStatsContent');
+    if (!el) return;
+    const { totalSessions, totalMessages, savedImagesCount } = getUsageStats();
+    el.innerHTML = `
+        <div class="settings-row">
+            <div class="settings-row-label"><span>Total chats</span></div>
+            <span style="font-size:0.8125rem;color:var(--muted);padding-right:10px;">${totalSessions}</span>
+        </div>
+        <div class="settings-row">
+            <div class="settings-row-label"><span>Messages sent</span></div>
+            <span style="font-size:0.8125rem;color:var(--muted);padding-right:10px;">${totalMessages}</span>
+        </div>
+        <div class="settings-row" style="border-bottom:none">
+            <div class="settings-row-label"><span>Saved images</span></div>
+            <span style="font-size:0.8125rem;color:var(--muted);padding-right:10px;">${savedImagesCount}</span>
+        </div>`;
+}
+
+function exportAllChats() {
+    if (!chatSessions || !chatSessions.length) {
+        toast.info('No chats to export.');
+        return;
+    }
+    const data = JSON.stringify(chatSessions, null, 2);
+    const blob = new Blob([data], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'vexa-chats-' + new Date().toISOString().slice(0, 10) + '.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
 }
 
 function initSettings() {
@@ -107,6 +325,14 @@ function initSettings() {
         if (e.target === document.getElementById('settingsModalOverlay')) closeSettingsModal();
     });
     document.getElementById('settingsModalClose')?.addEventListener('click', closeSettingsModal);
+
+    initSettingsControls();
+    applyVexaSettingsToUI();
+
+    loadVexaSettingsFromFirebase().then(() => {
+        applyVexaSettingsToUI();
+        populateDefaultModelSelect();
+    });
 }
 
 function openSettingsModal() {
@@ -118,6 +344,9 @@ function openSettingsModal() {
         showSettingsMenu();
     }
     populateAiThemesInDropdown();
+    applyVexaSettingsToUI();
+    populateDefaultModelSelect();
+    renderUsageStats();
 }
 
 function closeSettingsModal() {
@@ -468,6 +697,11 @@ function showSettingsMenu() {
                 <div class="smm-item-body"><div class="smm-item-title">Appearance</div></div>
                 <i class="fa-solid fa-chevron-right smm-chevron"></i>
             </div>
+            <div class="smm-card-item smm-chevron-item" onclick="openSettingsSection('ai')">
+                <div class="smm-item-icon"><i class="fa-solid fa-robot"></i></div>
+                <div class="smm-item-body"><div class="smm-item-title">AI & Response</div></div>
+                <i class="fa-solid fa-chevron-right smm-chevron"></i>
+            </div>
             <div class="smm-card-item smm-chevron-item" onclick="openSettingsSection('data')">
                 <div class="smm-item-icon"><i class="fa-solid fa-database"></i></div>
                 <div class="smm-item-body"><div class="smm-item-title">Data controls</div></div>
@@ -495,7 +729,7 @@ function openSettingsSection(key) {
         body.style.padding = '16px 20px 40px';
     }
 
-    const titleMap = { general: 'General', account: 'Account', appearance: 'Appearance', personalization: 'Personalization', data: 'Data controls' };
+    const titleMap = { general: 'General', account: 'Account', appearance: 'Appearance', personalization: 'Personalization', data: 'Data controls', ai: 'AI & Response' };
     const mobileTitle = document.getElementById('settingsMobileTitle');
     if (mobileTitle) mobileTitle.textContent = titleMap[key] || 'Settings';
 
@@ -514,6 +748,9 @@ function openSettingsSection(key) {
             closeBtn.classList.remove('hidden');
         };
     }
+
+    if (key === 'data') renderUsageStats();
+    if (key === 'ai') { applyVexaSettingsToUI(); populateDefaultModelSelect(); }
 }
 
 function initMobileSettingsGestures() {

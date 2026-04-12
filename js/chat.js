@@ -391,11 +391,23 @@ function addBubble(role, text, msgIndex) {
     const row = document.createElement('div');
     row.className = 'msg-row ' + (role === 'user' ? 'user' : 'bot');
 
+    const s = getVexaSettings ? getVexaSettings() : {};
+    const showTs = !!s.showTimestamps;
+    const tsHtml = showTs
+        ? `<div class="msg-timestamp">${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>`
+        : '';
+
     if (role === 'user') {
         const bub = document.createElement('div');
         bub.className = 'user-bub';
         bub.innerHTML = escHtml(text).replace(/\n/g, '<br>');
         row.appendChild(bub);
+        if (showTs) {
+            const tsEl = document.createElement('div');
+            tsEl.className = 'msg-timestamp';
+            tsEl.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            row.appendChild(tsEl);
+        }
 
         if (msgIndex !== undefined) {
             let pressTimer;
@@ -415,6 +427,12 @@ function addBubble(role, text, msgIndex) {
         bub.className = 'bot-bub';
         const rendered = fmt(text);
         bub.innerHTML = `<div class="bot-bub-content">${rendered}</div><div class="msg-actions"><button class="copy-text-btn" title="Copy message"><i class="fa-regular fa-copy"></i> Copy</button></div>`;
+        if (showTs) {
+            const tsEl = document.createElement('div');
+            tsEl.className = 'msg-timestamp';
+            tsEl.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            bub.appendChild(tsEl);
+        }
         row.appendChild(bub);
         let rawText = text;
         attachCopyText(row, () => rawText);
@@ -720,38 +738,68 @@ function buildSystemPrompt() {
     if (!prefs) {
         try { prefs = JSON.parse(localStorage.getItem('vexa_personalization') || 'null'); } catch { }
     }
-    if (!prefs) return 'You are a helpful assistant. Be concise.';
 
-    let system = 'You are a helpful assistant.';
+    const s = getVexaSettings ? getVexaSettings() : {};
 
-    const toneMap = {
-        balanced: 'Be clear and concise.',
-        formal: 'Use formal, professional language.',
-        casual: 'Use casual, friendly language.',
-        technical: 'Use precise, technical language.'
-    };
-    system += ' ' + (toneMap[prefs.baseTone] || toneMap.balanced);
+    const basePrompt = s.systemPrompt
+        ? s.systemPrompt.trim()
+        : 'You are a helpful assistant.';
 
-    if (prefs.nickname) system += ` Address the user as "${prefs.nickname}".`;
-    if (prefs.aboutUser) system += ` About the user: ${prefs.aboutUser}.`;
-    if (prefs.customInstructions) system += ` Additional instructions: ${prefs.customInstructions}.`;
-
-    const charMap = {
-        charWarm: { more: 'Be warm and empathetic.', less: 'Be neutral and direct.' },
-        charEnthusiastic: { more: 'Show enthusiasm and energy.', less: 'Be calm and reserved.' },
-        charHeaders: { more: 'Use headers to organize long responses.', less: 'Avoid headers, use prose instead.' },
-        charEmoji: { more: 'Use emojis occasionally to add personality.', less: 'Never use emojis.' },
-        charHumor: { more: 'Include light humor when appropriate.', less: 'Keep responses serious.' }
-    };
-
-    Object.entries(charMap).forEach(([key, vals]) => {
-        if (prefs[key] === 'more') system += ' ' + vals.more;
-        else if (prefs[key] === 'less') system += ' ' + vals.less;
-    });
-
-    if (!prefs) {
-        console.warn('[Personalization] No prefs found — using default system prompt.');
+    if (!prefs && !s.systemPrompt && !s.responseLength && !s.responseLang && !s.memoryEnabled) {
         return 'You are a helpful assistant. Be concise.';
+    }
+
+    let system = basePrompt;
+
+    if (prefs) {
+        const toneMap = {
+            balanced: 'Be clear and concise.',
+            formal: 'Use formal, professional language.',
+            casual: 'Use casual, friendly language.',
+            technical: 'Use precise, technical language.'
+        };
+        if (!s.systemPrompt) {
+            system += ' ' + (toneMap[prefs.baseTone] || toneMap.balanced);
+        }
+
+        if (prefs.nickname) system += ` Address the user as "${prefs.nickname}".`;
+        if (prefs.aboutUser) system += ` About the user: ${prefs.aboutUser}.`;
+        if (prefs.customInstructions) system += ` Additional instructions: ${prefs.customInstructions}.`;
+
+        const charMap = {
+            charWarm: { more: 'Be warm and empathetic.', less: 'Be neutral and direct.' },
+            charEnthusiastic: { more: 'Show enthusiasm and energy.', less: 'Be calm and reserved.' },
+            charHeaders: { more: 'Use headers to organize long responses.', less: 'Avoid headers, use prose instead.' },
+            charEmoji: { more: 'Use emojis occasionally to add personality.', less: 'Never use emojis.' },
+            charHumor: { more: 'Include light humor when appropriate.', less: 'Keep responses serious.' }
+        };
+
+        Object.entries(charMap).forEach(([key, vals]) => {
+            if (prefs[key] === 'more') system += ' ' + vals.more;
+            else if (prefs[key] === 'less') system += ' ' + vals.less;
+        });
+    }
+
+    if (s.responseLength) {
+        const lenMap = {
+            short: 'Keep all responses brief and to the point — avoid unnecessary elaboration.',
+            balanced: '',
+            detailed: 'Give thorough, detailed responses with examples and explanation where helpful.'
+        };
+        if (lenMap[s.responseLength]) system += ' ' + lenMap[s.responseLength];
+    }
+
+    if (s.responseLang && s.responseLang !== 'auto') {
+        system += ` Always respond in ${s.responseLang}.`;
+    }
+
+    if (s.memoryEnabled) {
+        try {
+            const memories = JSON.parse(localStorage.getItem('vexa_memory') || '[]');
+            if (memories.length) {
+                system += ` Known facts about the user: ${memories.join('; ')}.`;
+            }
+        } catch { }
     }
 
     return system;
@@ -924,7 +972,8 @@ async function sendText(text) {
         } else {
             session.messages.push({ role: 'assistant', content: replyContent });
         }
-        if (session.messages.filter(m => m.role === 'user').length === 1) {
+        const s = getVexaSettings ? getVexaSettings() : {};
+        if (s.autoTitle !== false && session.messages.filter(m => m.role === 'user').length === 1) {
             const aiTitle = await generateChatTitle(text, typeof aiReply === 'string' ? aiReply : '');
             if (aiTitle) {
                 session.title = aiTitle;
@@ -1172,54 +1221,27 @@ function initChat() {
         inp.style.height = Math.min(inp.scrollHeight, 160) + 'px';
         sbtn.disabled = !inp.value.trim() || busy;
     });
+
+    function shouldSendOnEnter() {
+        const isMobile = window.innerWidth <= 680;
+        if (isMobile) return false;
+        const s = getVexaSettings ? getVexaSettings() : {};
+        return s.sendOnEnter !== false;
+    }
+
     inp.addEventListener('keydown', e => {
-        const isMobile = window.innerWidth <= 680;
         if (e.key === 'Enter') {
-            if (isMobile) {
-                if (e.shiftKey) {
-                    e.preventDefault();
-                    doSend();
-                }
-            } else {
-                if (!e.shiftKey) {
-                    e.preventDefault();
-                    doSend();
-                }
+            const send = shouldSendOnEnter();
+            if (send && !e.shiftKey) {
+                e.preventDefault();
+                doSend();
+            } else if (!send && e.ctrlKey) {
+                e.preventDefault();
+                doSend();
             }
         }
     });
-    inp.addEventListener('keypress', e => {
-        const isMobile = window.innerWidth <= 680;
-        if (e.key === 'Enter') {
-            if (isMobile) {
-                if (e.shiftKey) {
-                    e.preventDefault();
-                    doSend();
-                }
-            } else {
-                if (!e.shiftKey) {
-                    e.preventDefault();
-                    doSend();
-                }
-            }
-        }
-    });
-    inp.addEventListener('keyup', e => {
-        const isMobile = window.innerWidth <= 680;
-        if (e.key === 'Enter') {
-            if (isMobile) {
-                if (e.shiftKey) {
-                    e.preventDefault();
-                    doSend();
-                }
-            } else {
-                if (!e.shiftKey) {
-                    e.preventDefault();
-                    doSend();
-                }
-            }
-        }
-    });
+
     sbtn.addEventListener('click', doSend);
     initSearch();
 }

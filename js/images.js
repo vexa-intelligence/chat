@@ -205,18 +205,25 @@ async function saveImagesToFirebase() {
 
 function renderMyImages() {
   const grid = document.getElementById('myImagesGrid');
+  const empty = document.getElementById('myImagesEmpty');
   if (!grid) return;
 
   if (!savedImages.length) {
-    grid.innerHTML = '<div class="my-images-empty">Your generated images will appear here</div>';
+    grid.innerHTML = '';
+    if (empty) empty.style.display = 'block';
     return;
   }
 
+  if (empty) empty.style.display = 'none';
   grid.innerHTML = '';
 
-  savedImages.forEach(img => {
+  savedImages.forEach((img, index) => {
     const imageUrl = img.storageUrl || img.base64 || img.url;
     if (!imageUrl) return;
+
+    const container = document.createElement('div');
+    container.className = 'my-image-container';
+    container.style.cssText = 'position:relative;';
 
     const el = document.createElement('img');
     el.className = 'my-image-thumb';
@@ -225,7 +232,23 @@ function renderMyImages() {
     el.title = img.prompt || '';
     el.style.cursor = 'pointer';
     el.onclick = () => openLightbox(imageUrl);
-    grid.appendChild(el);
+
+    const deleteBtn = document.createElement('button');
+    deleteBtn.onclick = (e) => {
+      e.stopPropagation();
+      deleteImage(index);
+    };
+
+    container.addEventListener('mouseenter', () => {
+      deleteBtn.style.opacity = '1';
+    });
+    container.addEventListener('mouseleave', () => {
+      deleteBtn.style.opacity = '0';
+    });
+
+    container.appendChild(el);
+    container.appendChild(deleteBtn);
+    grid.appendChild(container);
   });
 }
 
@@ -396,6 +419,34 @@ function closeImageOutput() {
   document.getElementById('imageOutputArea')?.classList.add('hidden');
 }
 
+async function deleteImage(index) {
+  if (!confirm('Are you sure you want to delete this image?')) return;
+
+  try {
+    savedImages.splice(index, 1);
+    renderMyImages();
+    await saveImagesToFirebase();
+    showToast('Image deleted', 'success');
+  } catch (error) {
+    console.error('Error deleting image:', error);
+    showToast('Failed to delete image', 'error');
+  }
+}
+
+async function deleteAllImages() {
+  if (!confirm('Are you sure you want to delete all your images? This action cannot be undone.')) return;
+
+  try {
+    savedImages = [];
+    renderMyImages();
+    await saveImagesToFirebase();
+    showToast('All images deleted', 'success');
+  } catch (error) {
+    console.error('Error deleting all images:', error);
+    showToast('Failed to delete images', 'error');
+  }
+}
+
 async function quickImageSend(prompt) {
   const inp = document.getElementById('imagePromptInp');
   if (inp) inp.value = prompt;
@@ -406,6 +457,7 @@ async function quickImageSend(prompt) {
 function initImages() {
   const inp = document.getElementById('imagePromptInp');
   const sendBtn = document.getElementById('imgGenSend');
+  const deleteAllBtn = document.getElementById('deleteAllImagesBtn');
 
   sendBtn.onclick = () => {
     const prompt = inp.value.trim();
@@ -420,6 +472,10 @@ function initImages() {
     }
   });
 
+  if (deleteAllBtn) {
+    deleteAllBtn.onclick = deleteAllImages;
+  }
+
   setTimeout(() => {
     initDiscoverPreviews();
     initStylePreviews();
@@ -433,6 +489,7 @@ function initLightbox() {
   const lightboxOverlay = document.getElementById('lightboxOverlay');
   const lightboxImage = document.getElementById('lightboxImage');
 
+  if (!lightboxOverlay || !lightboxImage) return;
   if (!lightboxOverlay || !lightboxImage) return;
 
   lightboxOverlay.addEventListener('click', (e) => {
