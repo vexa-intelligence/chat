@@ -191,10 +191,18 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    let hasFocusedInitially = false;
+
     const focusInput = () => {
         const input = document.getElementById('inp');
-        if (input && currentPage === 'chat') {
+        if (input && currentPage === 'chat' && !hasFocusedInitially) {
+            const isMobile = window.innerWidth <= 680;
+            const isLandscapeMobile = window.innerHeight <= 600 && window.innerWidth > window.innerHeight;
+            if (isMobile || isLandscapeMobile) {
+                return false;
+            }
             input.focus();
+            hasFocusedInitially = true;
             return true;
         }
         return false;
@@ -239,13 +247,19 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('mobileUserAvatarTop')?.addEventListener('click', e => {
         e.stopPropagation();
         if (!currentUser) { openAuthOverlay(); return; }
-        openUserPopover();
+        openSettingsModal();
     });
 
     document.getElementById('mdSearchBtn')?.addEventListener('click', () => {
         closeMobileDrawer();
         openSearchModal();
     });
+
+    const mobileDrawerVexa = document.querySelector('.mobile-drawer-head span');
+    if (mobileDrawerVexa) {
+        mobileDrawerVexa.addEventListener('click', closeMobileDrawer);
+        mobileDrawerVexa.style.cursor = 'pointer';
+    }
 
     document.getElementById('userInfo')?.addEventListener('click', e => {
         e.stopPropagation();
@@ -451,7 +465,12 @@ function showInputOverlay() {
     if (inputArea && backdrop) {
         inputArea.classList.add('visible');
         backdrop.classList.add('visible');
-        document.getElementById('inp')?.focus();
+
+        const isMobile = window.innerWidth <= 680;
+        const isLandscapeMobile = window.innerHeight <= 600 && window.innerWidth > window.innerHeight;
+        if (!isMobile && !isLandscapeMobile) {
+            document.getElementById('inp')?.focus();
+        }
     }
 }
 
@@ -484,58 +503,41 @@ document.addEventListener('keydown', e => {
         const backdrop = document.getElementById('inputBackdrop');
         if (backdrop?.classList.contains('visible')) hideInputOverlay();
     }
-
-    const inp = document.getElementById('inp');
-    if (inp && document.activeElement !== inp && currentPage === 'chat' &&
-        !e.ctrlKey && !e.metaKey && !e.altKey &&
-        e.key.length === 1 && !e.target.matches('input, textarea, select, button, a')) {
-        e.preventDefault();
-        inp.focus();
-    }
 });
 
 function initGlobalFocusManagement() {
     const inp = document.getElementById('inp');
     if (!inp) return;
 
-    document.addEventListener('click', (e) => {
-        if (currentPage === 'chat' &&
-            !e.target.matches('input, textarea, select, button, a') &&
-            !e.target.closest('input, textarea, select, button, a') &&
-            document.activeElement !== inp) {
-            setTimeout(() => inp.focus(), 0);
+    const isMobileDevice = () => {
+        const isMobile = window.innerWidth <= 680;
+        const isLandscapeMobile = window.innerHeight <= 600 && window.innerWidth > window.innerHeight;
+        return isMobile || isLandscapeMobile;
+    };
+
+    let hasFocusedOnce = false;
+
+    const focusOnce = () => {
+        if (!hasFocusedOnce && !isMobileDevice() && inp && currentPage === 'chat') {
+            inp.focus();
+            hasFocusedOnce = true;
         }
-    });
+    };
 
     const originalShowPageRaw = showPageRaw;
     showPageRaw = function (name) {
         originalShowPageRaw(name);
         if (name === 'chat') {
-            setTimeout(() => {
-                if (inp) inp.focus();
-            }, 100);
+            focusOnce();
         }
     };
-
-    window.addEventListener('focus', () => {
-        if (currentPage === 'chat' && inp) {
-            setTimeout(() => inp.focus(), 100);
-        }
-    });
-
-    document.addEventListener('visibilitychange', () => {
-        if (!document.hidden && currentPage === 'chat' && inp) {
-            setTimeout(() => inp.focus(), 100);
-        }
-    });
 
     const originalDoSend = window.doSend;
     if (originalDoSend) {
         window.doSend = function () {
             originalDoSend.apply(this, arguments);
-            setTimeout(() => {
-                if (inp && currentPage === 'chat') inp.focus();
-            }, 100);
         };
     }
+
+    focusOnce();
 }

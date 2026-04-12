@@ -1,6 +1,13 @@
 function initSettings() {
+    initMobileSettingsGestures();
+
     document.querySelectorAll('.settings-tab').forEach(tab => {
         tab.addEventListener('click', () => {
+            const isMobile = window.innerWidth <= 680 || window.innerHeight <= 909;
+            if (isMobile) {
+                openSettingsSection(tab.dataset.section);
+                return;
+            }
             document.querySelectorAll('.settings-tab').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.settings-section').forEach(s => s.classList.remove('active'));
             tab.classList.add('active');
@@ -34,6 +41,8 @@ function initSettings() {
         }
     });
 
+    document.getElementById('savePersonalizationBtn')?.addEventListener('click', savePersonalization);
+
     const savedTheme = localStorage.getItem('vexa_theme') || 'light';
     const themeSelect = document.getElementById('themeSelect');
     if (themeSelect) themeSelect.value = savedTheme;
@@ -55,7 +64,12 @@ function initSettings() {
 
 function openSettingsModal() {
     updateSettingsAccountUI(!!currentUser);
+    loadPersonalization();
     document.getElementById('settingsModalOverlay')?.classList.remove('hidden');
+    const isMobile = window.innerWidth <= 680 || window.innerHeight <= 909;
+    if (isMobile) {
+        showSettingsMenu();
+    }
 }
 
 function closeSettingsModal() {
@@ -63,41 +77,61 @@ function closeSettingsModal() {
 }
 
 function updateSettingsAccountUI(loggedIn) {
+    const profileHeader = document.getElementById('settingsProfileHeader');
     const el = document.getElementById('accountContent');
-    if (!el) return;
+
     if (loggedIn && currentUser) {
         const email = currentUser.email || '';
+        const username = email.split('@')[0];
         const savedAvatar = localStorage.getItem('user_avatar_' + currentUser.uid);
-        const avatarHtml = savedAvatar
-            ? `<img src="${savedAvatar}" class="account-avatar-img" />`
-            : `<div class="account-avatar">${email.charAt(0).toUpperCase()}</div>`;
-        el.innerHTML = `
-            <div class="account-logged">
-                <div class="account-logged-info">
-                    ${avatarHtml}
-                    <div>
-                        <div class="account-name">${escHtml(email.split('@')[0])}</div>
-                        <div class="account-email">${escHtml(email)}</div>
-                    </div>
+        const initials = username.slice(0, 2).toUpperCase();
+
+        if (profileHeader) {
+            profileHeader.innerHTML = `
+                <div class="settings-profile-avatar" id="settingsProfileAvatar">
+                    ${savedAvatar ? `<img src="${savedAvatar}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">` : initials}
                 </div>
-                <button class="account-logout-btn" id="logoutBtn">Log out</button>
-            </div>
-            <input type="file" id="avatarUpload" accept="image/*" class="avatar-upload-input" style="display:none;">`;
-        document.getElementById('logoutBtn').addEventListener('click', signOut);
-        document.getElementById('avatarUpload').addEventListener('change', handleAvatarUpload);
-        const avatarImg = document.querySelector('.account-avatar-img');
-        if (avatarImg) {
-            avatarImg.addEventListener('click', () => {
-                document.getElementById('avatarUpload').click();
-            });
+                <div class="settings-profile-name">${escHtml(username)}</div>
+                <div class="settings-profile-username">${escHtml(username)}</div>
+                <button class="settings-profile-edit-btn" onclick="document.getElementById('avatarUpload').click()">Edit profile</button>
+                <input type="file" id="avatarUpload" accept="image/*" style="display:none;">`;
+            document.getElementById('avatarUpload')?.addEventListener('change', handleAvatarUpload);
+        }
+
+        if (el) {
+            el.innerHTML = `
+                <div class="settings-row">
+                    <div class="settings-row-label">
+                        <span>Email</span>
+                    </div>
+                    <span style="font-size:0.8125rem;color:var(--muted);padding-right: 10px;">${escHtml(email)}</span>
+                </div>
+                <div class="settings-row">
+                    <div class="settings-row-label">
+                        <span>Subscription</span>
+                    </div>
+                    <span style="font-size:0.8125rem;color:var(--muted);padding-right: 10px;">Free Plan</span>
+                </div>
+                <div class="settings-row" style="border-bottom:none">
+                    <div class="settings-row-label">
+                        <span style="color:var(--danger)">Log out</span>
+                    </div>
+                    <button class="settings-danger-btn" id="logoutBtn" style="border-color:var(--border);color:var(--fg)">Log out</button>
+                </div>`;
+            document.getElementById('logoutBtn')?.addEventListener('click', signOut);
         }
     } else {
-        el.innerHTML = `
-            <div class="account-not-logged">
-                <p>You are not logged in.</p>
-                <button class="auth-submit" id="settingsLoginBtn" style="margin-top:12px;width:auto;padding:10px 24px">Log in</button>
-            </div>`;
-        document.getElementById('settingsLoginBtn').addEventListener('click', openAuthOverlay);
+        if (profileHeader) profileHeader.innerHTML = '';
+        if (el) {
+            el.innerHTML = `
+                <div class="settings-row" style="border-bottom:none">
+                    <div class="account-not-logged">
+                        <p>You are not logged in.</p>
+                        <button class="auth-submit" id="settingsLoginBtn" style="margin-top:12px;width:auto;padding:10px 24px">Log in</button>
+                    </div>
+                </div>`;
+            document.getElementById('settingsLoginBtn')?.addEventListener('click', openAuthOverlay);
+        }
     }
 }
 
@@ -240,4 +274,281 @@ function createThemeSwitchFeedback() {
     setTimeout(() => {
         feedback.remove();
     }, 600);
+}
+
+async function savePersonalization() {
+    const prefs = {
+        baseTone: document.getElementById('baseToneSelect')?.value || 'balanced',
+        charWarm: document.getElementById('charWarm')?.value || 'default',
+        charEnthusiastic: document.getElementById('charEnthusiastic')?.value || 'default',
+        charHeaders: document.getElementById('charHeaders')?.value || 'default',
+        charEmoji: document.getElementById('charEmoji')?.value || 'default',
+        charHumor: document.getElementById('charHumor')?.value || 'default',
+        customInstructions: document.getElementById('customInstructions')?.value || '',
+        nickname: document.getElementById('userNickname')?.value || '',
+        aboutUser: document.getElementById('aboutUser')?.value || ''
+    };
+
+    localStorage.setItem('vexa_personalization', JSON.stringify(prefs));
+
+    if (currentUser && window.firebaseDB) {
+        try {
+            await window.firebaseDB.collection('user_preferences').doc(currentUser.uid).set(prefs, { merge: true });
+        } catch (e) {
+            console.error('Error saving personalization:', e);
+        }
+    }
+
+    const btn = document.getElementById('savePersonalizationBtn');
+    if (btn) {
+        btn.textContent = 'Saved!';
+        setTimeout(() => { btn.textContent = 'Save preferences'; }, 2000);
+    }
+}
+
+async function loadPersonalization() {
+    let prefs = null;
+
+    if (currentUser && window.firebaseDB) {
+        try {
+            const doc = await window.firebaseDB.collection('user_preferences').doc(currentUser.uid).get();
+            if (doc.exists) prefs = doc.data();
+        } catch (e) { }
+    }
+
+    if (!prefs) {
+        try { prefs = JSON.parse(localStorage.getItem('vexa_personalization') || 'null'); } catch { }
+    }
+
+    if (!prefs) return;
+
+    const setVal = (id, val) => {
+        const el = document.getElementById(id);
+        if (el && val !== undefined) el.value = val;
+    };
+
+    setVal('baseToneSelect', prefs.baseTone);
+    setVal('charWarm', prefs.charWarm);
+    setVal('charEnthusiastic', prefs.charEnthusiastic);
+    setVal('charHeaders', prefs.charHeaders);
+    setVal('charEmoji', prefs.charEmoji);
+    setVal('charHumor', prefs.charHumor);
+    setVal('customInstructions', prefs.customInstructions);
+    setVal('userNickname', prefs.nickname);
+    setVal('aboutUser', prefs.aboutUser);
+
+    window.vexaPersonalization = prefs;
+}
+
+function showSettingsMenu() {
+    document.querySelectorAll('.settings-section').forEach(s => s.classList.remove('active'));
+    document.querySelectorAll('.settings-tab').forEach(t => t.classList.remove('active'));
+    const body = document.querySelector('.settings-modal-body');
+    if (!body) return;
+
+    const mobileTitle = document.getElementById('settingsMobileTitle');
+    if (mobileTitle) mobileTitle.textContent = 'Settings';
+
+    const backBtn = document.getElementById('settingsBackBtn');
+    const closeBtn = document.getElementById('settingsModalClose');
+    if (backBtn) backBtn.classList.add('hidden');
+    if (closeBtn) closeBtn.classList.remove('hidden');
+
+    let menuEl = document.getElementById('settingsMobileMenu');
+    if (!menuEl) {
+        menuEl = document.createElement('div');
+        menuEl.id = 'settingsMobileMenu';
+        body.prepend(menuEl);
+    }
+
+    const email = currentUser?.email || '';
+    const username = email.split('@')[0] || '';
+    const savedAvatar = currentUser ? localStorage.getItem('user_avatar_' + currentUser.uid) : null;
+    const initials = username.slice(0, 2).toUpperCase() || 'U';
+
+    const avatarHtml = savedAvatar
+        ? `<img src="${savedAvatar}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`
+        : initials;
+
+    const profileHtml = currentUser ? `
+        <div class="smm-profile">
+            <div class="smm-avatar">${avatarHtml}</div>
+            <div class="smm-name">${escHtml(username)}</div>
+            <div class="smm-username">${escHtml(username)}</div>
+            <button class="smm-edit-btn" onclick="document.getElementById('avatarUploadMain')?.click()">Edit profile</button>
+            <input type="file" id="avatarUploadMain" accept="image/*" style="display:none;">
+        </div>
+        <div class="smm-section-label">Account</div>
+        <div class="smm-card">
+            <div class="smm-card-item">
+                <div class="smm-item-icon"><i class="fa-regular fa-envelope"></i></div>
+                <div class="smm-item-body">
+                    <div class="smm-item-title">Email</div>
+                    <div class="smm-item-sub">${escHtml(email)}</div>
+                </div>
+            </div>
+            <div class="smm-card-item">
+                <div class="smm-item-icon"><i class="fa-solid fa-plus-circle"></i></div>
+                <div class="smm-item-body"><div class="smm-item-title">Subscription</div></div>
+                <span class="smm-item-badge">Free Plan</span>
+            </div>
+            <div class="smm-card-item smm-chevron-item" onclick="openSettingsSection('personalization')">
+                <div class="smm-item-icon"><i class="fa-solid fa-wand-magic-sparkles"></i></div>
+                <div class="smm-item-body"><div class="smm-item-title">Personalization</div></div>
+                <i class="fa-solid fa-chevron-right smm-chevron"></i>
+            </div>
+        </div>
+        <div class="smm-section-label">Preferences</div>
+    ` : `
+        <div class="smm-profile">
+            <div class="smm-avatar">U</div>
+            <div class="smm-name">Not logged in</div>
+            <button class="smm-edit-btn" onclick="closeSettingsModal();openAuthOverlay()">Log in</button>
+        </div>
+        <div class="smm-section-label">Preferences</div>
+    `;
+
+    menuEl.innerHTML = profileHtml + `
+        <div class="smm-card">
+            <div class="smm-card-item smm-chevron-item" onclick="openSettingsSection('general')">
+                <div class="smm-item-icon"><i class="fa-solid fa-sliders"></i></div>
+                <div class="smm-item-body"><div class="smm-item-title">General</div></div>
+                <i class="fa-solid fa-chevron-right smm-chevron"></i>
+            </div>
+            <div class="smm-card-item smm-chevron-item" onclick="openSettingsSection('appearance')">
+                <div class="smm-item-icon"><i class="fa-solid fa-palette"></i></div>
+                <div class="smm-item-body"><div class="smm-item-title">Appearance</div></div>
+                <i class="fa-solid fa-chevron-right smm-chevron"></i>
+            </div>
+            <div class="smm-card-item smm-chevron-item" onclick="openSettingsSection('data')">
+                <div class="smm-item-icon"><i class="fa-solid fa-database"></i></div>
+                <div class="smm-item-body"><div class="smm-item-title">Data controls</div></div>
+                <i class="fa-solid fa-chevron-right smm-chevron"></i>
+            </div>
+        </div>
+        <div style="height:32px"></div>
+    `;
+
+    body.style.padding = '0 0 40px';
+    menuEl.style.display = 'block';
+
+    document.getElementById('avatarUploadMain')?.addEventListener('change', handleAvatarUpload);
+}
+
+function openSettingsSection(key) {
+    const body = document.querySelector('.settings-modal-body');
+    const menuEl = document.getElementById('settingsMobileMenu');
+    if (menuEl) menuEl.style.display = 'none';
+
+    document.querySelectorAll('.settings-section').forEach(s => s.classList.remove('active'));
+    const sec = document.getElementById('settings-' + key);
+    if (sec) {
+        sec.classList.add('active');
+        body.style.padding = '16px 20px 40px';
+    }
+
+    const titleMap = { general: 'General', account: 'Account', appearance: 'Appearance', personalization: 'Personalization', data: 'Data controls' };
+    const mobileTitle = document.getElementById('settingsMobileTitle');
+    if (mobileTitle) mobileTitle.textContent = titleMap[key] || 'Settings';
+
+    const backBtn = document.getElementById('settingsBackBtn');
+    const closeBtn = document.getElementById('settingsModalClose');
+    if (backBtn) backBtn.classList.remove('hidden');
+    if (closeBtn) closeBtn.classList.add('hidden');
+
+    if (backBtn) {
+        backBtn.onclick = () => {
+            document.querySelectorAll('.settings-section').forEach(s => s.classList.remove('active'));
+            body.style.padding = '0';
+            if (menuEl) menuEl.style.display = 'block';
+            mobileTitle.textContent = 'Settings';
+            backBtn.classList.add('hidden');
+            closeBtn.classList.remove('hidden');
+        };
+    }
+}
+
+function initMobileSettingsGestures() {
+    let touchStartY = 0;
+    let touchCurrentY = 0;
+    let isDragging = false;
+    let startY = 0;
+    let startTime = 0;
+
+    const settingsModal = document.getElementById('settingsModal');
+    const settingsModalOverlay = document.getElementById('settingsModalOverlay');
+
+    if (!settingsModal || !settingsModalOverlay) return;
+
+    function handleTouchStart(e) {
+        const isMobile = window.innerWidth <= 680 || window.innerHeight <= 909;
+        if (!isMobile) return;
+
+        const touch = e.touches[0];
+        touchStartY = touch.clientY;
+        touchCurrentY = touch.clientY;
+        startY = touch.clientY;
+        startTime = Date.now();
+        isDragging = true;
+
+        settingsModal.style.transition = 'none';
+        settingsModal.style.transform = 'translateY(0)';
+    }
+
+    function handleTouchMove(e) {
+        if (!isDragging) return;
+
+        const touch = e.touches[0];
+        touchCurrentY = touch.clientY;
+        const deltaY = touchCurrentY - touchStartY;
+
+        if (deltaY > 0) {
+            e.preventDefault();
+            const resistance = Math.min(deltaY * 0.5, 100);
+            settingsModal.style.transform = `translateY(${deltaY}px)`;
+
+            const opacity = Math.max(1 - (deltaY / 300), 0.3);
+            settingsModalOverlay.style.backgroundColor = `rgba(0, 0, 0, ${0.6 * opacity})`;
+        }
+    }
+
+    function handleTouchEnd(e) {
+        if (!isDragging) return;
+
+        isDragging = false;
+        const deltaY = touchCurrentY - touchStartY;
+        const deltaTime = Date.now() - startTime;
+        const velocity = deltaY / deltaTime;
+
+        settingsModal.style.transition = 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease';
+        settingsModalOverlay.style.transition = 'background-color 0.3s ease';
+
+        if (deltaY > 100 || velocity > 0.5) {
+            settingsModal.style.transform = 'translateY(100%)';
+            settingsModalOverlay.style.backgroundColor = 'rgba(0, 0, 0, 0)';
+
+            setTimeout(() => {
+                closeSettingsModal();
+                settingsModal.style.transform = '';
+                settingsModal.style.transition = '';
+                settingsModalOverlay.style.backgroundColor = '';
+                settingsModalOverlay.style.transition = '';
+            }, 300);
+        } else {
+            settingsModal.style.transform = 'translateY(0)';
+            settingsModalOverlay.style.backgroundColor = 'rgba(0, 0, 0, 0.6)';
+
+            setTimeout(() => {
+                settingsModal.style.transform = '';
+                settingsModal.style.transition = '';
+                settingsModalOverlay.style.backgroundColor = '';
+                settingsModalOverlay.style.transition = '';
+            }, 300);
+        }
+    }
+
+    settingsModal.addEventListener('touchstart', handleTouchStart, { passive: false });
+    settingsModal.addEventListener('touchmove', handleTouchMove, { passive: false });
+    settingsModal.addEventListener('touchend', handleTouchEnd, { passive: true });
+    settingsModal.addEventListener('touchcancel', handleTouchEnd, { passive: true });
 }

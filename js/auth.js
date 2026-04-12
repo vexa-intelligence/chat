@@ -40,11 +40,13 @@ function initFirebase() {
                 _pendingChatId = null;
             }
             if (typeof loadImagesFromFirebase === 'function') await loadImagesFromFirebase();
+            if (typeof loadPersonalization === 'function') await loadPersonalization();
         } else {
             chatSessions = [];
             currentSessionId = null;
             renderChatHistory();
             newChat();
+            if (typeof loadPersonalization === 'function') loadPersonalization();
         }
     });
 }

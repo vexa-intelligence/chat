@@ -715,6 +715,48 @@ async function clearAllChatsFromFirebase() {
     }
 }
 
+function buildSystemPrompt() {
+    let prefs = window.vexaPersonalization;
+    if (!prefs) {
+        try { prefs = JSON.parse(localStorage.getItem('vexa_personalization') || 'null'); } catch { }
+    }
+    if (!prefs) return 'You are a helpful assistant. Be concise.';
+
+    let system = 'You are a helpful assistant.';
+
+    const toneMap = {
+        balanced: 'Be clear and concise.',
+        formal: 'Use formal, professional language.',
+        casual: 'Use casual, friendly language.',
+        technical: 'Use precise, technical language.'
+    };
+    system += ' ' + (toneMap[prefs.baseTone] || toneMap.balanced);
+
+    if (prefs.nickname) system += ` Address the user as "${prefs.nickname}".`;
+    if (prefs.aboutUser) system += ` About the user: ${prefs.aboutUser}.`;
+    if (prefs.customInstructions) system += ` Additional instructions: ${prefs.customInstructions}.`;
+
+    const charMap = {
+        charWarm: { more: 'Be warm and empathetic.', less: 'Be neutral and direct.' },
+        charEnthusiastic: { more: 'Show enthusiasm and energy.', less: 'Be calm and reserved.' },
+        charHeaders: { more: 'Use headers to organize long responses.', less: 'Avoid headers, use prose instead.' },
+        charEmoji: { more: 'Use emojis occasionally to add personality.', less: 'Never use emojis.' },
+        charHumor: { more: 'Include light humor when appropriate.', less: 'Keep responses serious.' }
+    };
+
+    Object.entries(charMap).forEach(([key, vals]) => {
+        if (prefs[key] === 'more') system += ' ' + vals.more;
+        else if (prefs[key] === 'less') system += ' ' + vals.less;
+    });
+
+    if (!prefs) {
+        console.warn('[Personalization] No prefs found — using default system prompt.');
+        return 'You are a helpful assistant. Be concise.';
+    }
+
+    return system;
+}
+
 function buildConversationHistory(session) {
     if (!session || !session.messages) return [];
 
@@ -727,7 +769,7 @@ function buildConversationHistory(session) {
         })
         .map(m => ({ role: m.role, content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content) }));
 
-    const systemMessage = { role: 'system', content: 'You are a helpful assistant. Be concise.' };
+    const systemMessage = { role: 'system', content: buildSystemPrompt() };
     const maxChars = 14000;
 
     let historyMessages = [];
@@ -747,7 +789,7 @@ function buildConversationHistory(session) {
 async function sendChatText(userMessage, loading, session) {
     const history = buildConversationHistory(session);
     const messages = [
-        { role: 'system', content: 'You are a helpful assistant. Be concise.' },
+        { role: 'system', content: buildSystemPrompt() },
         ...history,
         { role: 'user', content: userMessage }
     ];
@@ -1320,4 +1362,3 @@ function openSearchModal() {
     input.focus();
     resetSearchResults();
 }
-
