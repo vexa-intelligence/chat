@@ -92,6 +92,97 @@ function closeMobileDrawer() {
     document.getElementById('mobileOverlay')?.classList.remove('visible');
 }
 
+function initMobileDrawerGestures() {
+    const mobileDrawer = document.getElementById('mobileDrawer');
+    const mobileOverlay = document.getElementById('mobileOverlay');
+    if (!mobileDrawer || !mobileOverlay) return;
+
+    let startY = 0;
+    let currentY = 0;
+    let isDragging = false;
+    let startTime = 0;
+
+    function isMobile() {
+        return window.innerWidth <= 680 || window.innerHeight <= 909;
+    }
+
+    function onStart(clientY) {
+        if (!isMobile()) return;
+        startY = clientY;
+        currentY = clientY;
+        startTime = Date.now();
+        isDragging = true;
+        mobileDrawer.style.transition = 'none';
+        mobileOverlay.style.transition = 'none';
+    }
+
+    function onMove(clientY) {
+        if (!isDragging) return;
+        currentY = clientY;
+        const delta = currentY - startY;
+        if (delta <= 0) return;
+
+        mobileDrawer.style.transform = `translateY(${delta}px)`;
+        const opacity = Math.max(0.6 - (delta / 400), 0.1);
+        mobileOverlay.style.backgroundColor = `rgba(0,0,0,${opacity})`;
+    }
+
+    function onEnd() {
+        if (!isDragging) return;
+        isDragging = false;
+        const delta = currentY - startY;
+        const velocity = delta / Math.max(Date.now() - startTime, 1);
+
+        if (delta > 120 || velocity > 0.6) {
+            mobileDrawer.style.transition = 'transform 0.38s cubic-bezier(0.32,0.72,0,1)';
+            mobileOverlay.style.transition = 'background-color 0.38s ease';
+            requestAnimationFrame(() => {
+                mobileDrawer.style.transform = 'translateY(100%)';
+                mobileOverlay.style.backgroundColor = 'rgba(0,0,0,0)';
+            });
+            setTimeout(() => {
+                closeMobileDrawer();
+                mobileDrawer.style.transition = '';
+                mobileDrawer.style.transform = '';
+                mobileOverlay.style.transition = '';
+                mobileOverlay.style.backgroundColor = '';
+            }, 400);
+        } else {
+            mobileDrawer.style.transition = 'transform 0.32s cubic-bezier(0.32,0.72,0,1)';
+            mobileOverlay.style.transition = 'background-color 0.32s ease';
+            requestAnimationFrame(() => {
+                mobileDrawer.style.transform = 'translateY(0)';
+                mobileOverlay.style.backgroundColor = 'rgba(0,0,0,0.6)';
+            });
+            setTimeout(() => {
+                mobileDrawer.style.transition = '';
+                mobileDrawer.style.transform = '';
+                mobileOverlay.style.transition = '';
+                mobileOverlay.style.backgroundColor = '';
+            }, 320);
+        }
+    }
+
+    mobileDrawer.addEventListener('touchstart', e => {
+        if (!isMobile()) return;
+        const touch = e.touches[0];
+        const target = e.target;
+        const drawerHead = mobileDrawer.querySelector('.mobile-drawer-head');
+        const inHead = drawerHead && drawerHead.contains(target);
+        if (!inHead) return;
+        onStart(touch.clientY);
+    }, { passive: true });
+
+    mobileDrawer.addEventListener('touchmove', e => {
+        if (!isDragging) return;
+        onMove(e.touches[0].clientY);
+        e.preventDefault();
+    }, { passive: false });
+
+    mobileDrawer.addEventListener('touchend', () => onEnd(), { passive: true });
+    mobileDrawer.addEventListener('touchcancel', () => onEnd(), { passive: true });
+}
+
 function syncMobileHistory() {
     const container = document.getElementById('mobileHistoryList');
     if (!container) return;
@@ -176,6 +267,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initCustomAlert();
     initToast();
     initMobileSwipeToDelete();
+    initMobileDrawerGestures();
 
     loadModels();
 

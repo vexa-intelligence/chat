@@ -1,3 +1,34 @@
+async function populateAiThemesInDropdown() {
+    const themeSelect = document.getElementById('themeSelect');
+    if (!themeSelect) return;
+
+    const activeAiThemeId = localStorage.getItem('vexa_active_ai_theme');
+    const savedTheme = localStorage.getItem('vexa_theme') || 'light';
+    const currentValue = activeAiThemeId || savedTheme;
+
+    const aiThemes = await loadAiThemesFromFirebase();
+
+    const existingAiOptions = themeSelect.querySelectorAll('option[value^="aitheme_"], option:disabled');
+    existingAiOptions.forEach(option => option.remove());
+
+    if (aiThemes.length > 0) {
+        const separator = document.createElement('option');
+        separator.disabled = true;
+        separator.textContent = '--- AI Themes ---';
+        separator.style.cssText = 'font-weight: 600; color: var(--muted);';
+        themeSelect.appendChild(separator);
+
+        aiThemes.forEach(theme => {
+            const option = document.createElement('option');
+            option.value = theme.id;
+            option.textContent = theme.name;
+            themeSelect.appendChild(option);
+        });
+    }
+
+    themeSelect.value = currentValue;
+}
+
 function initSettings() {
     initMobileSettingsGestures();
 
@@ -16,11 +47,24 @@ function initSettings() {
         });
     });
 
-    document.getElementById('themeSelect')?.addEventListener('change', e => {
+    document.getElementById('themeSelect')?.addEventListener('change', async e => {
         const theme = e.target.value;
-        applyTheme(theme);
-        localStorage.setItem('vexa_theme', theme);
-        saveUserPrefToFirebase('theme', theme);
+
+        if (theme.startsWith('aitheme_')) {
+            const themes = await loadAiThemesFromFirebase();
+            const aiTheme = themes.find(t => t.id === theme);
+            if (aiTheme) {
+                applyAiTheme(aiTheme);
+                setTimeout(() => {
+                    e.target.value = theme;
+                }, 10);
+            }
+        } else {
+            applyTheme(theme);
+            localStorage.setItem('vexa_theme', theme);
+            saveUserPrefToFirebase('theme', theme);
+            clearAiThemeOverrides();
+        }
     });
 
     document.getElementById('fontSizeSelect')?.addEventListener('change', e => {
@@ -43,10 +87,13 @@ function initSettings() {
 
     document.getElementById('savePersonalizationBtn')?.addEventListener('click', savePersonalization);
 
-    const savedTheme = localStorage.getItem('vexa_theme') || 'light';
-    const themeSelect = document.getElementById('themeSelect');
-    if (themeSelect) themeSelect.value = savedTheme;
-    applyTheme(savedTheme);
+    populateAiThemesInDropdown().then(() => {
+        const activeAiThemeId = localStorage.getItem('vexa_active_ai_theme');
+        if (!activeAiThemeId) {
+            const savedTheme = localStorage.getItem('vexa_theme') || 'light';
+            applyTheme(savedTheme);
+        }
+    });
 
     const savedFontSize = localStorage.getItem('vexa_fontsize') || '15';
     const fontSizeSelect = document.getElementById('fontSizeSelect');
@@ -70,6 +117,7 @@ function openSettingsModal() {
     if (isMobile) {
         showSettingsMenu();
     }
+    populateAiThemesInDropdown();
 }
 
 function closeSettingsModal() {
@@ -469,86 +517,110 @@ function openSettingsSection(key) {
 }
 
 function initMobileSettingsGestures() {
-    let touchStartY = 0;
-    let touchCurrentY = 0;
-    let isDragging = false;
-    let startY = 0;
-    let startTime = 0;
-
     const settingsModal = document.getElementById('settingsModal');
     const settingsModalOverlay = document.getElementById('settingsModalOverlay');
-
     if (!settingsModal || !settingsModalOverlay) return;
 
-    function handleTouchStart(e) {
-        const isMobile = window.innerWidth <= 680 || window.innerHeight <= 909;
-        if (!isMobile) return;
+    let startY = 0;
+    let currentY = 0;
+    let isDragging = false;
+    let startTime = 0;
+    let dragHandle = null;
 
-        const touch = e.touches[0];
-        touchStartY = touch.clientY;
-        touchCurrentY = touch.clientY;
-        startY = touch.clientY;
+    function ensureHandle() {
+        if (dragHandle) return dragHandle;
+        dragHandle = document.createElement('div');
+        dragHandle.style.cssText = `
+            position:absolute;top:0;left:0;right:0;height:48px;
+            display:flex;align-items:center;justify-content:center;
+            cursor:grab;flex-shrink:0;z-index:20;touch-action:none;
+        `;
+        const pill = document.createElement('div');
+        pill.style.cssText = `
+            width:36px;height:4px;border-radius:2px;
+            background:var(--border);margin-top:10px;pointer-events:none;
+        `;
+        dragHandle.appendChild(pill);
+        settingsModal.prepend(dragHandle);
+        return dragHandle;
+    }
+
+    function isMobile() {
+        return window.innerWidth <= 680 || window.innerHeight <= 909;
+    }
+
+    function onStart(clientY) {
+        startY = clientY;
+        currentY = clientY;
         startTime = Date.now();
         isDragging = true;
-
         settingsModal.style.transition = 'none';
-        settingsModal.style.transform = 'translateY(0)';
     }
 
-    function handleTouchMove(e) {
+    function onMove(clientY) {
         if (!isDragging) return;
-
-        const touch = e.touches[0];
-        touchCurrentY = touch.clientY;
-        const deltaY = touchCurrentY - touchStartY;
-
-        if (deltaY > 0) {
-            e.preventDefault();
-            const resistance = Math.min(deltaY * 0.5, 100);
-            settingsModal.style.transform = `translateY(${deltaY}px)`;
-
-            const opacity = Math.max(1 - (deltaY / 300), 0.3);
-            settingsModalOverlay.style.backgroundColor = `rgba(0, 0, 0, ${0.6 * opacity})`;
-        }
+        currentY = clientY;
+        const delta = currentY - startY;
+        if (delta <= 0) return;
+        settingsModal.style.transform = `translateY(${delta}px)`;
+        const opacity = Math.max(0.6 - (delta / 400), 0.1);
+        settingsModalOverlay.style.backgroundColor = `rgba(0,0,0,${opacity})`;
     }
 
-    function handleTouchEnd(e) {
+    function onEnd() {
         if (!isDragging) return;
-
         isDragging = false;
-        const deltaY = touchCurrentY - touchStartY;
-        const deltaTime = Date.now() - startTime;
-        const velocity = deltaY / deltaTime;
+        const delta = currentY - startY;
+        const velocity = delta / Math.max(Date.now() - startTime, 1);
 
-        settingsModal.style.transition = 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease';
-        settingsModalOverlay.style.transition = 'background-color 0.3s ease';
-
-        if (deltaY > 100 || velocity > 0.5) {
-            settingsModal.style.transform = 'translateY(100%)';
-            settingsModalOverlay.style.backgroundColor = 'rgba(0, 0, 0, 0)';
-
+        if (delta > 120 || velocity > 0.6) {
+            settingsModal.style.transition = 'transform 0.38s cubic-bezier(0.32,0.72,0,1)';
+            settingsModalOverlay.style.transition = 'background-color 0.38s ease';
+            requestAnimationFrame(() => {
+                settingsModal.style.transform = 'translateY(110%)';
+                settingsModalOverlay.style.backgroundColor = 'rgba(0,0,0,0)';
+            });
             setTimeout(() => {
                 closeSettingsModal();
-                settingsModal.style.transform = '';
                 settingsModal.style.transition = '';
-                settingsModalOverlay.style.backgroundColor = '';
+                settingsModal.style.transform = '';
                 settingsModalOverlay.style.transition = '';
-            }, 300);
+                settingsModalOverlay.style.backgroundColor = '';
+            }, 400);
         } else {
-            settingsModal.style.transform = 'translateY(0)';
-            settingsModalOverlay.style.backgroundColor = 'rgba(0, 0, 0, 0.6)';
-
+            settingsModal.style.transition = 'transform 0.32s cubic-bezier(0.32,0.72,0,1)';
+            settingsModalOverlay.style.transition = 'background-color 0.32s ease';
+            requestAnimationFrame(() => {
+                settingsModal.style.transform = 'translateY(0)';
+                settingsModalOverlay.style.backgroundColor = 'rgba(0,0,0,0.6)';
+            });
             setTimeout(() => {
-                settingsModal.style.transform = '';
                 settingsModal.style.transition = '';
-                settingsModalOverlay.style.backgroundColor = '';
+                settingsModal.style.transform = '';
                 settingsModalOverlay.style.transition = '';
-            }, 300);
+                settingsModalOverlay.style.backgroundColor = '';
+            }, 320);
         }
     }
 
-    settingsModal.addEventListener('touchstart', handleTouchStart, { passive: false });
-    settingsModal.addEventListener('touchmove', handleTouchMove, { passive: false });
-    settingsModal.addEventListener('touchend', handleTouchEnd, { passive: true });
-    settingsModal.addEventListener('touchcancel', handleTouchEnd, { passive: true });
+    settingsModal.addEventListener('touchstart', e => {
+        if (!isMobile()) return;
+        const handle = ensureHandle();
+        const touch = e.touches[0];
+        const target = e.target;
+        const inHandle = handle.contains(target);
+        const mobileHeader = settingsModal.querySelector('.settings-mobile-header');
+        const inHeader = mobileHeader && mobileHeader.contains(target);
+        if (!inHandle && !inHeader) return;
+        onStart(touch.clientY);
+    }, { passive: true });
+
+    settingsModal.addEventListener('touchmove', e => {
+        if (!isDragging) return;
+        onMove(e.touches[0].clientY);
+        e.preventDefault();
+    }, { passive: false });
+
+    settingsModal.addEventListener('touchend', () => onEnd(), { passive: true });
+    settingsModal.addEventListener('touchcancel', () => onEnd(), { passive: true });
 }
