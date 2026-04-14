@@ -30,6 +30,8 @@ function initFirebase() {
         if (user) {
             closeAuthOverlay();
             await loadUserPrefsFromFirebase();
+            if (typeof applyVexaSettingsToUI === 'function') applyVexaSettingsToUI();
+            if (typeof restoreAttachModes === 'function') restoreAttachModes();
             await loadChatsFromFirebase();
 
             navigate(window.location.pathname, false);
@@ -84,6 +86,7 @@ async function loadUserPrefsFromFirebase() {
             localStorage.setItem('user_avatar_' + currentUser.uid, data.avatar);
             updateAllAvatars(data.avatar);
         }
+        if (typeof loadVexaSettingsFromFirebase === 'function') await loadVexaSettingsFromFirebase();
     } catch { }
 }
 

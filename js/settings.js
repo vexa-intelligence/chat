@@ -22,6 +22,7 @@ async function loadVexaSettingsFromFirebase() {
             localStorage.setItem('vexa_settings', JSON.stringify(merged));
         }
     } catch { }
+    if (typeof restoreAttachModes === 'function') restoreAttachModes();
 }
 
 async function populateAiThemesInDropdown() {
@@ -733,7 +734,6 @@ function openSettingsSection(key) {
     const sec = document.getElementById('settings-' + key);
     if (sec) {
         sec.classList.add('active');
-        body.style.padding = '16px 20px 40px';
     }
 
     const titleMap = { discord: 'Discord', general: 'General', account: 'Account', appearance: 'Appearance', personalization: 'Personalization', data: 'Data controls', ai: 'AI & Response' };

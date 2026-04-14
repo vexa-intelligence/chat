@@ -1958,7 +1958,6 @@ select {
 
 .settings-section.active {
     display: block;
-    margin-top: 50px;
 }
 
 .settings-section-title {
@@ -2158,7 +2157,7 @@ select {
     color: var(--muted);
     text-transform: uppercase;
     letter-spacing: 0.06em;
-    margin: 20px 0 8px 4px;
+    margin: 20px 0px 8px 20px
 }
 
 .char-row {
@@ -2213,7 +2212,7 @@ select {
 }
 
 .settings-save-full-btn {
-    width: 100%;
+    width: 80%;
     padding: 14px;
     border-radius: var(--radius-lg);
     background: var(--fg);
@@ -2223,6 +2222,9 @@ select {
     border: none;
     cursor: pointer;
     font-family: var(--font);
+    margin: 0 auto;
+    display: flex;
+    justify-content: center;
 }
 
 .settings-save-full-btn:hover {
@@ -2231,6 +2233,10 @@ select {
 
 @media (max-height: 909px),
 (max-width: 680px) {
+    .settings-section.active {
+        margin-top: 100px;
+    }
+
     .settings-mobile-header {
         display: flex;
         position: absolute;
@@ -2285,7 +2291,6 @@ select {
     }
 
     .settings-modal-body {
-        padding: 16px 20px 40px;
         flex: 1;
         overflow-y: auto;
         -webkit-mask-image: linear-gradient(to bottom, transparent, black 10%, black 90%, transparent);
@@ -3842,10 +3847,6 @@ button.topbar-expand.visible {
 
     .settings-modal-brand {
         display: none;
-    }
-
-    .settings-modal-body {
-        padding: 20px;
     }
 }
 

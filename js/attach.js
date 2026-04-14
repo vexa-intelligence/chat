@@ -25,6 +25,8 @@ function isDeepResearch() { return deepResearchEnabled; }
 function toggleThinkingMode() {
     thinkingModeEnabled = !thinkingModeEnabled;
     if (thinkingModeEnabled) deepResearchEnabled = false;
+    setVexaSetting('thinkingMode', thinkingModeEnabled);
+    setVexaSetting('deepResearch', false);
     updateAttachBtnIcon();
     updateDropdownActiveStates();
 }
@@ -32,6 +34,15 @@ function toggleThinkingMode() {
 function toggleDeepResearch() {
     deepResearchEnabled = !deepResearchEnabled;
     if (deepResearchEnabled) thinkingModeEnabled = false;
+    setVexaSetting('deepResearch', deepResearchEnabled);
+    setVexaSetting('thinkingMode', false);
+    updateAttachBtnIcon();
+    updateDropdownActiveStates();
+}
+
+function toggleWebSearch() {
+    if (typeof toggleSearchMode === 'function') toggleSearchMode();
+    if (typeof isSearchMode === 'function') setVexaSetting('searchMode', isSearchMode());
     updateAttachBtnIcon();
     updateDropdownActiveStates();
 }
@@ -99,12 +110,6 @@ function triggerImageUpload() {
 
 function triggerCameraCapture() {
     toast.comingSoon('Camera capture');
-}
-
-function toggleWebSearch() {
-    if (typeof toggleSearchMode === 'function') toggleSearchMode();
-    updateAttachBtnIcon();
-    updateDropdownActiveStates();
 }
 
 async function handleImageUpload(event) {
@@ -212,7 +217,19 @@ function injectAttachButton() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+    function restoreAttachModes() {
+        const s = typeof getVexaSettings === 'function' ? getVexaSettings() : {};
+        thinkingModeEnabled = !!s.thinkingMode;
+        deepResearchEnabled = !!s.deepResearch;
+        if (s.searchMode && typeof toggleSearchMode === 'function' && typeof isSearchMode === 'function' && !isSearchMode()) {
+            toggleSearchMode();
+        }
+        updateAttachBtnIcon();
+        updateDropdownActiveStates();
+    }
+    
     injectAttachButton();
+    restoreAttachModes();
 
     const styleSheet = document.createElement('style');
     styleSheet.textContent = `

@@ -401,13 +401,13 @@ function addBubble(role, text, msgIndex) {
         const bub = document.createElement('div');
         bub.className = 'user-bub';
         bub.innerHTML = escHtml(text).replace(/\n/g, '<br>');
-        row.appendChild(bub);
         if (showTs) {
             const tsEl = document.createElement('div');
             tsEl.className = 'msg-timestamp';
             tsEl.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            row.appendChild(tsEl);
+            bub.appendChild(tsEl);
         }
+        row.appendChild(bub);
 
         if (msgIndex !== undefined) {
             let pressTimer;
