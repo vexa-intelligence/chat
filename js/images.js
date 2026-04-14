@@ -211,7 +211,6 @@ function deduplicateImages() {
     const imageUrl = img.storageUrl || img.base64 || img.url;
     if (!imageUrl) continue;
 
-    // Check if we've seen this URL before
     if (!seenUrls.has(imageUrl)) {
       seenUrls.add(imageUrl);
       uniqueImages.push(img);
@@ -226,7 +225,6 @@ function renderMyImages() {
   const empty = document.getElementById('myImagesEmpty');
   if (!grid) return;
 
-  // Deduplicate existing images before rendering
   deduplicateImages();
 
   if (!savedImages.length) {
@@ -317,7 +315,6 @@ async function saveMyImage(url, prompt, providedBlob = null) {
       ts: Date.now()
     };
 
-    // Check for duplicate image by comparing originalUrl or storageUrl
     const isDuplicate = savedImages.some(existingImg =>
       existingImg.originalUrl === url ||
       existingImg.storageUrl === blobUrl ||
@@ -343,7 +340,6 @@ async function saveMyImage(url, prompt, providedBlob = null) {
     ts: Date.now()
   };
 
-  // Check for duplicate image by comparing originalUrl or storageUrl
   const isDuplicate = savedImages.some(existingImg =>
     existingImg.originalUrl === url ||
     existingImg.storageUrl === url ||
