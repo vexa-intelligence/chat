@@ -42,6 +42,8 @@
                 el.closest('[role="listbox"]') ||
                 el.closest('[role="combobox"]') ||
                 el.closest('select') ||
+                el.closest('.attach-dropdown') ||
+                el.closest('.attach-dropdown-container') ||
                 (el.tagName === 'INPUT' && ['text', 'password', 'email', 'search', 'tel', 'url', 'number'].includes(el.type)) ||
                 el.tagName === 'TEXTAREA'
                 ? false

@@ -203,10 +203,31 @@ async function saveImagesToFirebase() {
   }
 }
 
+function deduplicateImages() {
+  const uniqueImages = [];
+  const seenUrls = new Set();
+
+  for (const img of savedImages) {
+    const imageUrl = img.storageUrl || img.base64 || img.url;
+    if (!imageUrl) continue;
+
+    // Check if we've seen this URL before
+    if (!seenUrls.has(imageUrl)) {
+      seenUrls.add(imageUrl);
+      uniqueImages.push(img);
+    }
+  }
+
+  savedImages = uniqueImages;
+}
+
 function renderMyImages() {
   const grid = document.getElementById('myImagesGrid');
   const empty = document.getElementById('myImagesEmpty');
   if (!grid) return;
+
+  // Deduplicate existing images before rendering
+  deduplicateImages();
 
   if (!savedImages.length) {
     grid.innerHTML = '';
@@ -296,9 +317,18 @@ async function saveMyImage(url, prompt, providedBlob = null) {
       ts: Date.now()
     };
 
-    savedImages.unshift(image);
-    renderMyImages();
-    await saveImagesToFirebase();
+    // Check for duplicate image by comparing originalUrl or storageUrl
+    const isDuplicate = savedImages.some(existingImg =>
+      existingImg.originalUrl === url ||
+      existingImg.storageUrl === blobUrl ||
+      existingImg.url === blobUrl
+    );
+
+    if (!isDuplicate) {
+      savedImages.unshift(image);
+      renderMyImages();
+      await saveImagesToFirebase();
+    }
     return;
 
   } catch (error) {
@@ -313,9 +343,18 @@ async function saveMyImage(url, prompt, providedBlob = null) {
     ts: Date.now()
   };
 
-  savedImages.unshift(image);
-  renderMyImages();
-  await saveImagesToFirebase();
+  // Check for duplicate image by comparing originalUrl or storageUrl
+  const isDuplicate = savedImages.some(existingImg =>
+    existingImg.originalUrl === url ||
+    existingImg.storageUrl === url ||
+    existingImg.url === url
+  );
+
+  if (!isDuplicate) {
+    savedImages.unshift(image);
+    renderMyImages();
+    await saveImagesToFirebase();
+  }
 }
 
 async function generateImage(prompt, retryCount = 0) {

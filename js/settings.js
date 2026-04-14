@@ -675,17 +675,24 @@ function showSettingsMenu() {
                 <i class="fa-solid fa-chevron-right smm-chevron"></i>
             </div>
         </div>
-        <div class="smm-section-label">Preferences</div>
     ` : `
         <div class="smm-profile">
             <div class="smm-avatar">U</div>
             <div class="smm-name">Not logged in</div>
             <button class="smm-edit-btn" onclick="closeSettingsModal();openAuthOverlay()">Log in</button>
         </div>
-        <div class="smm-section-label">Preferences</div>
     `;
 
     menuEl.innerHTML = profileHtml + `
+        <div class="smm-section-label">Discord</div>
+        <div class="smm-card">
+            <div class="smm-card-item smm-chevron-item" onclick="openSettingsSection('discord')">
+                <div class="smm-item-icon"><i class="fa-brands fa-discord"></i></div>
+                <div class="smm-item-body"><div class="smm-item-title">Discord</div></div>
+                <i class="fa-solid fa-chevron-right smm-chevron"></i>
+            </div>
+        </div>
+        <div class="smm-section-label">Preferences</div>
         <div class="smm-card">
             <div class="smm-card-item smm-chevron-item" onclick="openSettingsSection('general')">
                 <div class="smm-item-icon"><i class="fa-solid fa-sliders"></i></div>
@@ -729,7 +736,7 @@ function openSettingsSection(key) {
         body.style.padding = '16px 20px 40px';
     }
 
-    const titleMap = { general: 'General', account: 'Account', appearance: 'Appearance', personalization: 'Personalization', data: 'Data controls', ai: 'AI & Response' };
+    const titleMap = { discord: 'Discord', general: 'General', account: 'Account', appearance: 'Appearance', personalization: 'Personalization', data: 'Data controls', ai: 'AI & Response' };
     const mobileTitle = document.getElementById('settingsMobileTitle');
     if (mobileTitle) mobileTitle.textContent = titleMap[key] || 'Settings';
 
@@ -775,7 +782,7 @@ function initMobileSettingsGestures() {
         const pill = document.createElement('div');
         pill.style.cssText = `
             width:36px;height:4px;border-radius:2px;
-            background:var(--border);margin-top:10px;pointer-events:none;
+            background:var(--border-light);margin-top:10px;pointer-events:none;
         `;
         dragHandle.appendChild(pill);
         settingsModal.prepend(dragHandle);

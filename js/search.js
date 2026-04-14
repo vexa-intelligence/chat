@@ -1,5 +1,45 @@
 const CYRON_BASE = 'https://cyron.pages.dev';
 
+const VISIT_PROXIES = [
+    {
+        name: 'allorigins',
+        fetch: async (url) => {
+            const ctrl = new AbortController();
+            const t = setTimeout(() => ctrl.abort(), 8000);
+            try {
+                const res = await fetch('https://api.allorigins.win/get?url=' + encodeURIComponent(url), { signal: ctrl.signal });
+                if (!res.ok) throw new Error('allorigins HTTP ' + res.status);
+                const data = await res.json();
+                return data.contents || '';
+            } finally { clearTimeout(t); }
+        }
+    },
+    {
+        name: 'corsproxy.io',
+        fetch: async (url) => {
+            const ctrl = new AbortController();
+            const t = setTimeout(() => ctrl.abort(), 8000);
+            try {
+                const res = await fetch('https://corsproxy.io/?' + encodeURIComponent(url), { signal: ctrl.signal });
+                if (!res.ok) throw new Error('corsproxy HTTP ' + res.status);
+                return res.text();
+            } finally { clearTimeout(t); }
+        }
+    },
+    {
+        name: 'codetabs',
+        fetch: async (url) => {
+            const ctrl = new AbortController();
+            const t = setTimeout(() => ctrl.abort(), 8000);
+            try {
+                const res = await fetch('https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(url), { signal: ctrl.signal });
+                if (!res.ok) throw new Error('codetabs HTTP ' + res.status);
+                return res.text();
+            } finally { clearTimeout(t); }
+        }
+    }
+];
+
 let searchModeEnabled = false;
 
 function isSearchMode() {
@@ -26,7 +66,7 @@ function injectSearchModeButton() {
 }
 
 async function cyronSearch(query) {
-    const res = await fetch(`${CYRON_BASE}/search/${encodeURIComponent(query)}?categories=general&per_page=5`);
+    const res = await fetch(CYRON_BASE + '/search/' + encodeURIComponent(query) + '?categories=general&per_page=5');
     if (!res.ok) throw new Error('Cyron HTTP ' + res.status);
     return res.json();
 }
@@ -35,26 +75,21 @@ function buildSearchContext(query, data) {
     if (!data || !data.results || !data.results.all || !data.results.all.length) {
         return null;
     }
-
     const results = data.results.all.slice(0, 5);
-
-    let ctx = `Web search results for: "${query}"\n\n`;
+    let ctx = 'Web search results for: "' + query + '"\n\n';
     results.forEach((r, i) => {
-        ctx += `[${i + 1}] ${r.title || 'No title'}\n`;
-        ctx += `URL: ${r.url}\n`;
-        if (r.content) ctx += `${r.content.slice(0, 300)}\n`;
+        ctx += '[' + (i + 1) + '] ' + (r.title || 'No title') + '\n';
+        ctx += 'URL: ' + r.url + '\n';
+        if (r.content) ctx += r.content.slice(0, 300) + '\n';
         ctx += '\n';
     });
-
     if (data.answers && data.answers.length) {
-        ctx += `Direct answer: ${data.answers[0]}\n\n`;
+        ctx += 'Direct answer: ' + data.answers[0] + '\n\n';
     }
-
     if (data.infobox && data.infobox.content) {
-        ctx += `Info: ${data.infobox.content.slice(0, 400)}\n\n`;
+        ctx += 'Info: ' + data.infobox.content.slice(0, 400) + '\n\n';
     }
-
-    ctx += 'Use the search results above to answer the user\'s question. Cite sources by referencing their title and URL inline where relevant.';
+    ctx += "Use the search results above to answer the user's question. Cite sources by referencing their title and URL inline where relevant.";
     return ctx;
 }
 
@@ -65,7 +100,7 @@ function addSearchStatusBubble() {
     row.id = 'searchStatusRow';
     const bub = document.createElement('div');
     bub.className = 'bot-bub search-status-bub';
-    bub.innerHTML = '<i class="fa-solid fa-globe" style="font-size:12px;margin-right:6px;color:var(--accent);"></i><span class="search-status-text">Searching the web…</span>';
+    bub.innerHTML = '<i class="fa-solid fa-globe" style="font-size:12px;margin-right:6px;color:var(--accent);"></i><span class="search-status-text">Searching the web\u2026</span>';
     row.appendChild(bub);
     feed.appendChild(row);
     return row;
@@ -87,26 +122,169 @@ function addSearchSourcesBar(results) {
     bar.className = 'msg-row bot';
     const bub = document.createElement('div');
     bub.className = 'bot-bub search-sources-bub';
-
     const chips = results.slice(0, 4).map(r => {
         let domain = '';
         try { domain = new URL(r.url).hostname.replace('www.', ''); } catch { domain = r.url; }
-        return `<a href="${escHtml(r.url)}" target="_blank" rel="noopener noreferrer" class="search-source-chip"><i class="fa-solid fa-link" style="font-size:10px"></i> ${escHtml(domain)}</a>`;
+        return '<a href="' + escHtml(r.url) + '" target="_blank" rel="noopener noreferrer" class="search-source-chip"><i class="fa-solid fa-link" style="font-size:10px"></i> ' + escHtml(domain) + '</a>';
     }).join('');
-
-    bub.innerHTML = `<div class="search-sources-row"><span class="search-sources-label"><i class="fa-solid fa-globe" style="font-size:11px;margin-right:4px;color:var(--accent)"></i>Sources</span>${chips}</div>`;
+    bub.innerHTML = '<div class="search-sources-row"><span class="search-sources-label"><i class="fa-solid fa-globe" style="font-size:11px;margin-right:4px;color:var(--accent)"></i>Sources</span>' + chips + '</div>';
     bar.appendChild(bub);
     feed.appendChild(bar);
 }
 
-const _origSendChatText = window.sendChatText;
+const VISIT_INTENT_RE = /\b(visit|go to|open|browse|read|check out|look at|fetch|load|scrape|summarize|analyze|what(?:'s| is) (?:on|at)|content of|tell me about|show me)\b/i;
+const URL_RE = /https?:\/\/[^\s"'<>)\]]+/gi;
+
+function detectVisitUrl(text) {
+    const urls = text.match(URL_RE);
+    if (!urls || !urls.length) return null;
+    const hasIntent = VISIT_INTENT_RE.test(text);
+    if (hasIntent) return urls[0];
+    const stripped = text.replace(URL_RE, '').trim();
+    if (stripped.length < 20) return urls[0];
+    return null;
+}
+
+function parseHtmlToText(html) {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+    ['script', 'style', 'noscript', 'nav', 'footer', 'header', 'aside', 'iframe', 'svg'].forEach(tag => {
+        doc.querySelectorAll(tag).forEach(el => el.remove());
+    });
+    const title = doc.title || '';
+    const text = (doc.body?.innerText || doc.body?.textContent || '')
+        .replace(/[ \t]{2,}/g, ' ')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim()
+        .slice(0, 8000);
+    return { title, text };
+}
+
+async function fetchPageText(url) {
+    let lastErr;
+    for (const proxy of VISIT_PROXIES) {
+        updateVisitStatus('Fetching via ' + proxy.name + '\u2026');
+        try {
+            const html = await proxy.fetch(url);
+            if (html && html.length > 50) {
+                const result = parseHtmlToText(html);
+                if (result.text.length > 10) {
+                    return result;
+                }
+            }
+        } catch (err) {
+            lastErr = err;
+        }
+    }
+    throw lastErr || new Error('All proxies failed');
+}
+
+function buildVisitContext(url, title, text) {
+    let ctx = 'Visited page: ' + url + '\n';
+    if (title) ctx += 'Page title: ' + title + '\n';
+    ctx += '\n--- Page Content ---\n' + text + '\n--- End of Page Content ---\n\n';
+    ctx += "Use the page content above to answer the user's question accurately. Quote the exact text where asked.";
+    return ctx;
+}
+
+function addVisitStatusBubble() {
+    const feed = document.getElementById('feed');
+    const row = document.createElement('div');
+    row.className = 'msg-row bot';
+    row.id = 'visitStatusRow';
+    const bub = document.createElement('div');
+    bub.className = 'bot-bub search-status-bub';
+    bub.innerHTML = '<i class="fa-solid fa-earth-americas" style="font-size:12px;margin-right:6px;color:var(--accent);"></i><span id="visitStatusText">Visiting website\u2026</span>';
+    row.appendChild(bub);
+    feed.appendChild(row);
+    return row;
+}
+
+function removeVisitStatusBubble() {
+    document.getElementById('visitStatusRow')?.remove();
+}
+
+function updateVisitStatus(text) {
+    const el = document.getElementById('visitStatusText');
+    if (el) el.textContent = text;
+}
+
+function addVisitedBar(url, title) {
+    const feed = document.getElementById('feed');
+    const bar = document.createElement('div');
+    bar.className = 'msg-row bot';
+    const bub = document.createElement('div');
+    bub.className = 'bot-bub search-sources-bub';
+    let domain = '';
+    try { domain = new URL(url).hostname.replace('www.', ''); } catch { domain = url; }
+    const displayTitle = title ? escHtml(title.slice(0, 50)) : escHtml(domain);
+    bub.innerHTML = '<div class="search-sources-row"><span class="search-sources-label"><i class="fa-solid fa-earth-americas" style="font-size:11px;margin-right:4px;color:var(--accent)"></i>Visited</span><a href="' + escHtml(url) + '" target="_blank" rel="noopener noreferrer" class="search-source-chip"><i class="fa-solid fa-link" style="font-size:10px"></i> ' + displayTitle + '</a></div>';
+    bar.appendChild(bub);
+    feed.appendChild(bar);
+}
+
+async function tryGetVisitContext(userMessage) {
+    const url = detectVisitUrl(userMessage);
+    if (!url) return null;
+    addVisitStatusBubble();
+    scrollBottom();
+    try {
+        const { title, text } = await fetchPageText(url);
+        updateVisitStatus('Page loaded');
+        await new Promise(r => setTimeout(r, 300));
+        removeVisitStatusBubble();
+        addVisitedBar(url, title);
+        scrollBottom();
+        const ctx = buildVisitContext(url, title, text);
+        return ctx;
+    } catch (err) {
+        updateVisitStatus('Could not load page');
+        await new Promise(r => setTimeout(r, 500));
+        removeVisitStatusBubble();
+        return 'The user asked you to visit ' + url + ' but all proxy fetch attempts failed (network/CORS restriction). Do NOT say you cannot visit websites in general — fetching was attempted and blocked externally. Tell the user you tried but the page was unreachable, and share any relevant knowledge you have about ' + url + ' from training.';
+    }
+}
 
 async function sendChatTextWithSearch(userMessage, loading, session) {
+    const visitContext = await tryGetVisitContext(userMessage);
+
+    if (visitContext) {
+        const history = buildConversationHistory(session);
+        const systemContent = buildSystemPrompt();
+        const messages = [
+            { role: 'system', content: systemContent },
+            ...history,
+            { role: 'user', content: visitContext + '\n\nUser question: ' + userMessage }
+        ];
+
+        const res = await fetch(CONFIG.BASE + '/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model: currentModel || 'vexa', messages })
+        });
+
+        if (!res.ok) {
+            const errorText = await res.text();
+            throw new Error('HTTP ' + res.status + ': ' + errorText);
+        }
+
+        const raw = await res.json();
+        if (!raw.success) throw new Error(raw.error || 'API returned success: false');
+
+        let reply = String(extractText(raw)).trim();
+        let think = null;
+        const m = reply.match(/<think>([\s\S]*?)<\/think>/i);
+        if (m) { think = m[1].trim(); reply = reply.replace(/<think>[\s\S]*?<\/think>/gi, '').trim(); }
+
+        await typewriterSwap(loading, reply, think);
+        return reply;
+    }
+
     if (!isSearchMode()) {
         return sendChatText(userMessage, loading, session);
     }
 
-    const statusRow = addSearchStatusBubble();
+    addSearchStatusBubble();
     scrollBottom();
 
     let searchContext = null;
@@ -118,7 +296,7 @@ async function sendChatTextWithSearch(userMessage, loading, session) {
         searchContext = buildSearchContext(userMessage, data);
         updateSearchStatus('Search complete');
     } catch (err) {
-        updateSearchStatus('Search failed, using AI knowledge…');
+        updateSearchStatus('Search failed, using AI knowledge\u2026');
     }
 
     await new Promise(r => setTimeout(r, 350));
@@ -130,7 +308,6 @@ async function sendChatTextWithSearch(userMessage, loading, session) {
     }
 
     const history = buildConversationHistory(session);
-
     const systemContent = buildSystemPrompt();
 
     const messages = [
@@ -139,12 +316,12 @@ async function sendChatTextWithSearch(userMessage, loading, session) {
         {
             role: 'user',
             content: searchContext
-                ? `${searchContext}\n\nUser question: ${userMessage}`
+                ? searchContext + '\n\nUser question: ' + userMessage
                 : userMessage
         }
     ];
 
-    const res = await fetch(`${CONFIG.BASE}/chat`, {
+    const res = await fetch(CONFIG.BASE + '/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ model: currentModel || 'vexa', messages })
@@ -152,7 +329,7 @@ async function sendChatTextWithSearch(userMessage, loading, session) {
 
     if (!res.ok) {
         const errorText = await res.text();
-        throw new Error(`HTTP ${res.status}: ${errorText}`);
+        throw new Error('HTTP ' + res.status + ': ' + errorText);
     }
 
     const raw = await res.json();
@@ -230,7 +407,9 @@ function initSearchMode() {
 
     const origSendText = window.sendText;
     window.sendText = async function (text) {
-        if (!isSearchMode()) {
+        const hasVisitUrl = !!detectVisitUrl(text);
+
+        if (!isSearchMode() && !hasVisitUrl) {
             return origSendText(text);
         }
 
@@ -286,6 +465,7 @@ function initSearchMode() {
             aiReply = await sendChatTextWithSearch(text, loading, session);
         } catch (err) {
             removeSearchStatusBubble();
+            removeVisitStatusBubble();
             swapText(loading, 'Error - ' + (err.message || 'try again.'));
         }
 

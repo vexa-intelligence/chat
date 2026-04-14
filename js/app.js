@@ -431,7 +431,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const attachBtn = document.getElementById('attachBtn');
     if (attachBtn) {
         attachBtn.addEventListener('click', () => {
-            toast.comingSoon("File attachments");
         });
     }
 

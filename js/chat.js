@@ -490,8 +490,33 @@ async function typewriterSwap(row, text, think) {
     if (think) {
         const block = document.createElement('div');
         block.className = 'think-block';
-        block.innerHTML = `<div class="think-head"><svg class="think-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg><span class="think-lbl">Reasoning</span></div><div class="think-body">${escHtml(think)}</div>`;
-        block.querySelector('.think-head').addEventListener('click', () => block.classList.toggle('open'));
+        block.innerHTML = `
+            <button class="think-toggle-btn">
+                <div class="think-toggle-left">
+                    <svg viewBox="0 0 24 24" fill="currentColor" class="think-sparkle-icon"><path d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5L12 2Z"/></svg>
+                    <span class="think-toggle-label">Thought for a moment</span>
+                </div>
+                <div class="think-toggle-right">
+                    <span class="think-show-hide">Show thinking</span>
+                    <svg class="think-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                </div>
+            </button>
+            <div class="think-content">
+                <div class="think-content-inner">${escHtml(think)}</div>
+            </div>`;
+        let open = true;
+        const btn = block.querySelector('.think-toggle');
+        const drawer = block.querySelector('.think-drawer');
+        const pill = block.querySelector('.think-pill');
+        drawer.classList.add('open');
+        pill.textContent = 'Hide';
+        pill.classList.add('active');
+        btn.addEventListener('click', () => {
+            open = !open;
+            drawer.classList.toggle('open', open);
+            pill.textContent = open ? 'Hide' : 'Show';
+            pill.classList.toggle('active', open);
+        });
         bub.appendChild(block);
     }
     const textEl = document.createElement('div');
@@ -835,6 +860,13 @@ function buildConversationHistory(session) {
 }
 
 async function sendChatText(userMessage, loading, session) {
+    if (window.isThinkingMode && window.isThinkingMode()) {
+        return sendChatTextWithThinking(userMessage, loading, session);
+    }
+    if (window.isDeepResearch && window.isDeepResearch()) {
+        return sendDeepResearch(userMessage, loading, session);
+    }
+
     const history = buildConversationHistory(session);
     const messages = [
         { role: 'system', content: buildSystemPrompt() },
@@ -906,6 +938,141 @@ async function sendChatImage(prompt, loading) {
     }
 }
 
+async function getImageDescription(dataUrl) {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            const MAX = 512;
+            const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+            canvas.width = Math.round(img.width * scale);
+            canvas.height = Math.round(img.height * scale);
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+            let r = 0, g = 0, b = 0, brightness = 0;
+            const total = imageData.length / 4;
+            for (let i = 0; i < imageData.length; i += 4) {
+                r += imageData[i];
+                g += imageData[i + 1];
+                b += imageData[i + 2];
+                brightness += (imageData[i] * 0.299 + imageData[i + 1] * 0.587 + imageData[i + 2] * 0.114);
+            }
+            r = Math.round(r / total);
+            g = Math.round(g / total);
+            b = Math.round(b / total);
+            brightness = Math.round(brightness / total);
+
+            const dominant = r > g && r > b ? 'reddish' : g > r && g > b ? 'greenish' : b > r && b > g ? 'bluish' : 'neutral';
+            const brightnessDesc = brightness > 200 ? 'very bright' : brightness > 128 ? 'moderately bright' : brightness > 64 ? 'somewhat dark' : 'very dark';
+            const aspect = img.width > img.height * 1.2 ? 'landscape/wide' : img.height > img.width * 1.2 ? 'portrait/tall' : 'square';
+            const res = `${img.width}x${img.height}px`;
+
+            resolve(`[Image attached — ${res}, ${aspect} orientation, ${brightnessDesc}, dominant tone: ${dominant}. Avg RGB: ${r},${g},${b}]`);
+        };
+        img.onerror = () => resolve('[Image attached — could not analyze]');
+        img.src = dataUrl;
+    });
+}
+
+async function sendChatWithImages(text, images, loading, session) {
+    const history = buildConversationHistory(session);
+
+    const descriptions = await Promise.all(images.map(url => getImageDescription(url)));
+    const imageContext = descriptions.join(' ');
+    const userContent = (text ? text + '\n\n' : 'Describe and analyze this image.\n\n') + imageContext;
+
+    const messages = [
+        { role: 'system', content: buildSystemPrompt() + ' When given image metadata like dimensions, brightness, and color tone, use it to describe and reason about the image as best you can.' },
+        ...history,
+        { role: 'user', content: userContent }
+    ];
+
+    const res = await fetch(`${CONFIG.BASE}/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: currentModel || 'vexa', messages })
+    });
+
+    if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(`HTTP ${res.status}: ${errorText}`);
+    }
+
+    const raw = await res.json();
+    if (!raw.success) throw new Error(raw.error || 'API returned success: false');
+
+    let reply = String(extractText(raw)).trim();
+    let think = null;
+    const m = reply.match(/<think>([\s\S]*?)<\/think>/i);
+    if (m) { think = m[1].trim(); reply = reply.replace(/<think>[\s\S]*?<\/think>/gi, '').trim(); }
+    await typewriterSwap(loading, reply, think);
+    return reply;
+}
+
+function addBubbleWithImages(role, text, images, index) {
+    const feed = document.getElementById('feed');
+    const row = document.createElement('div');
+    row.className = `msg-row ${role}`;
+
+    const bub = document.createElement('div');
+    bub.className = `${role}-bub`;
+
+    if (text) {
+        const textP = document.createElement('p');
+        textP.textContent = text;
+        bub.appendChild(textP);
+    }
+
+    if (images && images.length > 0) {
+        const imageContainer = document.createElement('div');
+        imageContainer.className = 'message-images';
+        imageContainer.style.cssText = `
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 8px;
+        `;
+
+        images.forEach(imageUrl => {
+            const imgWrapper = document.createElement('div');
+            imgWrapper.style.cssText = `
+                position: relative;
+                display: inline-block;
+                max-width: 200px;
+                border-radius: var(--radius);
+                overflow: hidden;
+                border: 1px solid var(--border);
+            `;
+
+            const img = document.createElement('img');
+            img.src = imageUrl;
+            img.alt = 'Uploaded image';
+            img.style.cssText = `
+                width: 100%;
+                height: auto;
+                display: block;
+                object-fit: cover;
+            `;
+
+            imgWrapper.appendChild(img);
+            imageContainer.appendChild(imgWrapper);
+        });
+
+        bub.appendChild(imageContainer);
+    }
+
+    row.appendChild(bub);
+    feed.appendChild(row);
+
+    setTimeout(() => {
+        feed.scrollTo({ top: feed.scrollHeight, behavior: 'smooth' });
+    }, 100);
+
+    return row;
+}
+
 async function sendText(text) {
     busy = true;
     showPageRaw('chat');
@@ -939,24 +1106,69 @@ async function sendText(text) {
         session = chatSessions.find(s => s.id === currentSessionId);
     }
 
+    const msgIndex = session.messages.length;
+    const hasImages = window.uploadedImages && window.uploadedImages.length > 0;
+    const capturedImages = hasImages ? [...window.uploadedImages] : [];
+
     if (editingMsgIndex !== null) {
         session.messages = session.messages.slice(0, editingMsgIndex);
         editingMsgIndex = null;
         document.getElementById('editIndicator')?.remove();
         const feed = document.getElementById('feed');
-        const rows = feed.querySelectorAll('.msg-row');
-        const keepRows = session.messages.length;
-        Array.from(rows).slice(keepRows).forEach(r => r.remove());
+    } else {
+        if (hasImages) {
+            session.messages.push({ role: 'user', content: text || 'What is in this image?' });
+            addBubbleWithImages('user', text, capturedImages, msgIndex);
+
+            for (const imageUrl of capturedImages) {
+                try {
+                    let blob = null;
+                    if (imageUrl.startsWith('data:')) {
+                        const response = await fetch(imageUrl);
+                        blob = await response.blob();
+                    } else {
+                        const response = await fetch(imageUrl.startsWith('/') ? CONFIG.BASE + imageUrl : imageUrl);
+                        if (response.ok) {
+                            blob = await response.blob();
+                        }
+                    }
+
+                    if (blob) {
+                        if (typeof saveMyImage === 'function') {
+                            await saveMyImage(imageUrl, 'User uploaded image', blob);
+                        }
+                    }
+                } catch (error) {
+                    console.error('Failed to save uploaded image to Firebase:', error);
+                }
+            }
+        } else {
+            session.messages.push({ role: 'user', content: text });
+            addBubble('user', text, msgIndex);
+        }
     }
 
-    const msgIndex = session.messages.length;
-    session.messages.push({ role: 'user', content: text });
-    addBubble('user', text, msgIndex);
     const loading = addLoading();
 
     let aiReply = null;
     try {
-        if (isImg(text)) {
+        if (typeof closeImageOutput === 'function') {
+            closeImageOutput();
+        }
+
+        if (hasImages) {
+            aiReply = await sendChatWithImages(text, window.uploadedImages, loading, session);
+            window.uploadedImages = [];
+            document.getElementById('inputImagesRow')?.remove();
+            document.querySelectorAll('.input-image-preview').forEach(p => p.remove());
+            const inp = document.getElementById('inp');
+            if (inp) inp.placeholder = 'Ask anything';
+            if (typeof updateAttachBtnIcon === 'function') updateAttachBtnIcon();
+        } else if (window.isDeepResearch && window.isDeepResearch()) {
+            aiReply = await sendDeepResearch(text, loading, session);
+        } else if (window.isThinkingMode && window.isThinkingMode()) {
+            aiReply = await sendChatTextWithThinking(text, loading, session);
+        } else if (isImg(text)) {
             aiReply = await sendChatImage(cleanImgPrompt(text), loading);
         } else {
             aiReply = await sendChatText(text, loading, session);
@@ -1220,6 +1432,18 @@ function initChat() {
         inp.style.height = 'auto';
         inp.style.height = Math.min(inp.scrollHeight, 160) + 'px';
         sbtn.disabled = !inp.value.trim() || busy;
+
+        const inputBox = document.querySelector('.input-box');
+        if (inputBox) {
+            const minHeight = 24;
+            const maxHeight = 160;
+            const currentHeight = Math.min(inp.scrollHeight, 160);
+            const progress = Math.min((currentHeight - minHeight) / (maxHeight - minHeight), 1);
+            const baseRadius = 3;
+            const minRadius = 1.2;
+            const newRadius = baseRadius - (progress * (baseRadius - minRadius));
+            inputBox.style.borderRadius = newRadius + 'vh';
+        }
     });
 
     function shouldSendOnEnter() {
@@ -1252,6 +1476,10 @@ function doSend() {
     if (!text || busy) return;
     inp.value = '';
     inp.style.height = 'auto';
+    const inputBox = document.querySelector('.input-box');
+    if (inputBox) {
+        inputBox.style.borderRadius = '3vh';
+    }
     document.getElementById('sbtn').disabled = true;
     sendText(text);
 }
