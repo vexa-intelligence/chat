@@ -9,10 +9,9 @@
 :root {
     --bg: rgba(0, 0, 0);
     --bg2: rgb(0, 0, 0);
-    --surface-rgb: rgba(3, 3, 3, 0.2);
-    --surface: rgba(3, 3, 3);
-    --surface2: rgb(6, 6, 6);
-    --surface3: rgb(7, 7, 7);
+    --surface: rgba(10, 10, 10);
+    --surface2: rgb(16, 16, 16);
+    --surface3: rgb(35, 35, 35);
     --fg: #f5f5f5;
     --fg-muted: #cfcfcf;
     --muted: #9a9aa8;
@@ -38,9 +37,8 @@
 }
 
 [data-theme="light"] {
-    --bg: #ffffff;
+    --bg: rgba(255, 255, 255);
     --bg2: rgba(240, 240, 240);
-    --surface-rgb: rgba(249, 249, 249, 0.8);
     --surface: #f9f9f9;
     --surface2: #efefef;
     --surface3: #e5e5e5;
@@ -102,6 +100,105 @@ body {
     background: var(--bg);
     overflow-x: hidden;
     transition: background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.discord-banner {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    color: var(--fg);
+    padding: 8px 0;
+    position: relative;
+    z-index: 1000;
+}
+
+.discord-banner-content {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 0 24px;
+    font-size: 0.8125rem;
+    color: var(--muted);
+}
+
+.discord-banner-text {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.discord-banner-text i {
+    color: #5865F2;
+    font-size: 1rem;
+}
+
+.discord-banner-btn {
+    background: var(--surface2);
+    color: var(--fg);
+    border: 1px solid var(--border);
+    padding: 4px 12px;
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: var(--transition);
+    white-space: nowrap;
+}
+
+.discord-banner-btn:hover {
+    background: var(--surface3);
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.discord-banner-close {
+    background: transparent;
+    color: var(--muted);
+    border: none;
+    width: 24px;
+    height: 24px;
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: var(--transition);
+    position: absolute;
+    right: 16px;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.discord-banner-close:hover {
+    background: var(--surface2);
+    color: var(--fg);
+}
+
+@media (max-width: 680px) {
+    .discord-banner {
+        padding: 6px 0;
+    }
+
+    .discord-banner-content {
+        padding: 0 16px 0 12px;
+        font-size: 0.75rem;
+        gap: 8px;
+    }
+
+    .discord-banner-text i {
+        font-size: 0.875rem;
+    }
+
+    .discord-banner-btn {
+        padding: 3px 8px;
+        font-size: 0.6875rem;
+    }
+
+    .discord-banner-close {
+        width: 20px;
+        height: 20px;
+        right: 12px;
+    }
 }
 
 button {
@@ -473,60 +570,6 @@ select {
     }
 }
 
-.scroll-to-bottom-btn {
-    display: none;
-    position: absolute;
-    bottom: 80px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 30px;
-    height: 30px;
-    border-radius: 50%;
-    background: var(--surface-rgb);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    border: none;
-    color: var(--fg);
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    z-index: 100;
-    transition: all 0.2s ease;
-    font-size: 0.5rem;
-}
-
-.scroll-to-bottom-btn:hover {
-    background: var(--surface2);
-}
-
-.scroll-to-bottom-btn:active {
-    transform: scale(0.95);
-}
-
-.scroll-to-bottom-btn.visible {
-    opacity: 1;
-    transform: translateY(0);
-}
-
-.scroll-to-bottom-btn.swiping-down {
-    transform: translateY(20px);
-    opacity: 0.5;
-}
-
-@media (max-width: 680px) {
-    .scroll-to-bottom-btn {
-        display: flex;
-        opacity: 0;
-        transform: translateY(10px);
-        transition: all 0.3s ease;
-    }
-
-    .scroll-to-bottom-btn.visible {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
 .page {
     flex: 1;
     overflow: hidden;
@@ -553,7 +596,7 @@ select {
     overflow-x: hidden;
     scrollbar-width: none;
     scrollbar-color: var(--border) transparent;
-    padding: 32px 0 160px;
+    padding: 32px 0 200px;
     min-height: 0;
     -webkit-mask-image: linear-gradient(to bottom, transparent, black 10%, black 90%, transparent);
     mask-image: linear-gradient(to bottom, transparent, black 10%, black 90%, transparent);
@@ -902,9 +945,9 @@ select {
 }
 
 .input-box {
-    background: var(--surface-rgb);
-    backdrop-filter: blur(5px) saturate(2);
-    -webkit-backdrop-filter: blur(5px) saturate(2);
+    background: var(--surface);
+    backdrop-filter: blur(25px) saturate(2);
+    -webkit-backdrop-filter: blur(25px) saturate(2);
     border-radius: 3vh;
     padding-top: 6px;
     padding-bottom: 6px;
@@ -976,9 +1019,25 @@ select {
     flex-shrink: 0;
 }
 
-.input-row-inline .input-tool-btn:hover {
+.input-row-inline #searchModeBtn {
+    background: var(--surface3);
+    transition: background-color 0.3s ease, color 0.3s ease, transform 0.2s ease;
+}
+
+.input-row-inline #searchModeBtn:hover {
     background: var(--surface2);
     color: var(--fg);
+    transform: scale(1.05);
+}
+
+.input-row-inline #searchModeBtn.active {
+    background: var(--fg);
+    color: var(--bg);
+    transition: background-color 0.3s ease, color 0.3s ease, transform 0.2s ease;
+}
+
+.input-row-inline #voiceBtn {
+    background: transparent;
 }
 
 .input-row-inline .send-btn {
@@ -1634,7 +1693,7 @@ select {
     border-bottom: none;
 }
 
-.settings-row-label span {
+.settings-row-label>span:first-child {
     font-size: 0.9375rem;
     color: var(--fg);
     font-weight: 500;
@@ -1642,6 +1701,14 @@ select {
 }
 
 .settings-row-label small {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--muted);
+    margin-top: 4px;
+    padding-left: 10px;
+}
+
+.settings-row-sub {
     display: block;
     font-size: 0.75rem;
     color: var(--muted);
@@ -1845,7 +1912,6 @@ select {
     font-family: var(--font);
     font-size: 0.9375rem;
     color: var(--fg);
-    padding: 4px 0;
 }
 
 .settings-inline-input::placeholder {
@@ -1879,6 +1945,14 @@ select {
         right: 0;
         z-index: 10;
         background: transparent;
+    }
+
+    .settings-row-label>span:first-child {
+        padding-left: 0px;
+    }
+
+    .settings-toggle {
+        margin-right: 0px;
     }
 
     .settings-modal {
@@ -3861,6 +3935,7 @@ body.show-timestamps .msg-timestamp {
     align-items: center;
     cursor: pointer;
     flex-shrink: 0;
+    margin-right: 10px;
 }
 
 .settings-toggle input {
@@ -3875,6 +3950,7 @@ body.show-timestamps .msg-timestamp {
     height: 22px;
     background: var(--border);
     border-radius: 11px;
+    background-color: var(--surface3);
     transition: background 0.2s;
     position: relative;
     flex-shrink: 0;
@@ -3891,10 +3967,6 @@ body.show-timestamps .msg-timestamp {
     background: #fff;
     transition: transform 0.2s;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-}
-
-.settings-toggle input:checked+.settings-toggle-track {
-    background: var(--accent);
 }
 
 .settings-toggle input:checked+.settings-toggle-track::after {

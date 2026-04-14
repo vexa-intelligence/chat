@@ -407,7 +407,23 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         };
 
-        if (voiceBtn) voiceBtn.addEventListener('click', startVoiceInput);
+        const stopVoiceInput = () => {
+            if (recognition) {
+                recognition.stop();
+                recognition.abort();
+                if (voiceBtn) voiceBtn.innerHTML = '<i class="fa-solid fa-microphone" style="font-size:14px"></i>';
+            }
+        };
+
+        const toggleVoiceInput = () => {
+            if (voiceBtn && voiceBtn.innerHTML.includes('fa-stop')) {
+                stopVoiceInput();
+            } else {
+                startVoiceInput();
+            }
+        };
+
+        if (voiceBtn) voiceBtn.addEventListener('click', toggleVoiceInput);
     } else {
         if (voiceBtn) voiceBtn.style.display = 'none';
     }
@@ -420,65 +436,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     topbarExpand?.classList.add('visible');
-
-    const scrollBtn = document.getElementById('scrollToBottomBtn');
-    let touchStartY = 0;
-    let touchStartX = 0;
-
-    function updateScrollButton() {
-        const feed = document.getElementById('feed');
-        if (!feed || !scrollBtn) return;
-
-        const isScrolledUp = feed.scrollTop < feed.scrollHeight - feed.clientHeight - 100;
-        scrollBtn.classList.toggle('visible', isScrolledUp);
-    }
-
-    const feed = document.getElementById('feed');
-    if (feed) {
-        feed.addEventListener('scroll', updateScrollButton);
-    }
-
-    if (scrollBtn) {
-        scrollBtn.addEventListener('touchstart', (e) => {
-            touchStartY = e.touches[0].clientY;
-            touchStartX = e.touches[0].clientX;
-        }, { passive: true });
-
-        scrollBtn.addEventListener('touchmove', (e) => {
-            const touchY = e.touches[0].clientY;
-            const touchX = e.touches[0].clientX;
-            const deltaY = touchY - touchStartY;
-            const deltaX = touchX - touchStartX;
-
-            if (deltaY > 50 && Math.abs(deltaX) < Math.abs(deltaY)) {
-                scrollBtn.classList.add('swiping-down');
-            }
-        }, { passive: true });
-
-        scrollBtn.addEventListener('touchend', (e) => {
-            const touchY = e.changedTouches[0].clientY;
-            const deltaY = touchY - touchStartY;
-
-            if (deltaY > 80) {
-                scrollBtn.classList.remove('visible');
-                setTimeout(() => {
-                    scrollBtn.classList.remove('swiping-down');
-                }, 300);
-            } else {
-                scrollBtn.classList.remove('swiping-down');
-            }
-        });
-
-        scrollBtn.addEventListener('click', () => {
-            const feed = document.getElementById('feed');
-            if (feed) {
-                feed.scrollTo({
-                    top: feed.scrollHeight,
-                    behavior: 'smooth'
-                });
-            }
-        });
-    }
 
     window.addEventListener('resize', () => {
         if (window.innerWidth > 680) {

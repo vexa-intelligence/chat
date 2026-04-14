@@ -218,8 +218,8 @@ async function generateAiTheme(prompt) {
     const btn = document.getElementById('aiThemeGenBtn');
     if (!prompt.trim()) return;
 
-    if (statusEl) statusEl.textContent = 'Generating theme…';
-    if (btn) { btn.disabled = true; btn.textContent = '…'; }
+    if (statusEl) { statusEl.textContent = 'Generating theme...'; statusEl.style.display = 'block'; }
+    if (btn) { btn.disabled = true; btn.textContent = '...'; }
 
     try {
         const aiPrompt = `Generate a UI color theme based on this description: "${prompt}". Return ONLY valid JSON, no markdown, no explanation. Schema: {"name":"<creative short name>","vars":{"--bg":"<hex>","--bg2":"<hex>","--surface-rgb":"<rgba>","--surface":"<hex>","--surface2":"<hex>","--surface3":"<hex>","--fg":"<hex>","--fg-muted":"<hex>","--muted":"<hex>","--light":"<hex>","--border":"<hex>","--border-light":"<hex>","--accent":"<hex>","--accent-hover":"<hex>"}}. Rules: ensure strong contrast between --bg and --fg (WCAG AA). --accent should pop against --bg. --surface should be slightly lighter/darker than --bg. Make it beautiful and cohesive for the prompt.`;
@@ -253,7 +253,7 @@ async function generateAiTheme(prompt) {
         }
 
         if (statusEl) statusEl.textContent = 'Theme "' + newTheme.name + '" created and applied!';
-        setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 3000);
+        setTimeout(() => { if (statusEl) { statusEl.textContent = ''; statusEl.style.display = 'none'; } }, 3000);
 
         const inp = document.getElementById('aiThemePrompt');
         if (inp) inp.value = '';
