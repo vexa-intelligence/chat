@@ -1,6 +1,6 @@
 ![Vexa Chat](https://vexa-ai.pages.dev/images/banner.png)
 
-Vexa Chat
+# Vexa
 
 Modern AI chat application with image generation, multi-model support, and real-time features.
 
@@ -89,3 +89,7 @@ Notes
 	•	Image upload uses Cloudinary widget
 	•	Chat sessions stored in Firestore
 	•	UI is fully client-side
+
+License
+
+MIT
