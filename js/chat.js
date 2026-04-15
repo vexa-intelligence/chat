@@ -1,4 +1,5 @@
 let busy = false;
+let currentAbortController = null;
 let chatSessions = [];
 let currentSessionId = null;
 let currentModel = '';
@@ -71,6 +72,13 @@ function fmt(raw) {
 
     const codeBlocks = [];
     const tableBlocks = [];
+    const searchSourcesBlocks = [];
+
+    t = t.replace(/<div class="search-sources-bub"><div class="search-sources-row">[\s\S]*?<\/div><\/div>/g, (match) => {
+        const idx = searchSourcesBlocks.length;
+        searchSourcesBlocks.push(match);
+        return `\x00SOURCES${idx}\x00`;
+    });
 
     t = t.replace(/```([\w]*)\n?([\s\S]*?)```/g, (_, lang, code) => {
         const idx = codeBlocks.length;
@@ -219,6 +227,10 @@ function fmt(raw) {
 
     html = html.replace(/\x00TABLE(\d+)\x00/g, (_, idx) => {
         return tableBlocks[parseInt(idx)] || '';
+    });
+
+    html = html.replace(/\x00SOURCES(\d+)\x00/g, (_, idx) => {
+        return searchSourcesBlocks[parseInt(idx)] || '';
     });
 
     return html;
@@ -423,6 +435,7 @@ function addBubble(role, text, msgIndex) {
             bub.addEventListener('dblclick', e => openMsgContextMenu(e, msgIndex));
         }
     } else {
+
         const bub = document.createElement('div');
         bub.className = 'bot-bub';
         const rendered = fmt(text);
@@ -768,12 +781,11 @@ function buildSystemPrompt() {
 
     const basePrompt = s.systemPrompt
         ? s.systemPrompt.trim()
-        : 'You are a helpful assistant.';
+        : 'You are a helpful, capable assistant. You can browse websites when given URLs, describe and analyze images, generate images on request, and search the web. Never refuse to attempt visiting a URL or viewing an image.';
 
     if (!prefs && !s.systemPrompt && !s.responseLength && !s.responseLang && !s.memoryEnabled) {
-        return 'You are a helpful assistant. Be concise.';
+        return 'You are a helpful, capable assistant. You can browse websites when given URLs, describe and analyze images, generate images on request, search the web, and answer any question. Never say you cannot visit a URL or view an image — always try. Be concise.';
     }
-
     let system = basePrompt;
 
     if (prefs) {
@@ -877,10 +889,8 @@ async function sendChatText(userMessage, loading, session) {
     const res = await fetch(`${CONFIG.BASE}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            model: currentModel || 'vexa',
-            messages
-        })
+        body: JSON.stringify({ model: currentModel || 'vexa', messages }),
+        signal: currentAbortController?.signal
     });
 
     if (!res.ok) {
@@ -1075,10 +1085,12 @@ function addBubbleWithImages(role, text, images, index) {
 
 async function sendText(text) {
     busy = true;
+    currentAbortController = new AbortController();
+    setSendBtnState(true);
+
     showPageRaw('chat');
     document.querySelector('.chat-wrap')?.classList.remove('empty-chat');
-    const feedEmpty = document.getElementById('feedEmpty');
-    if (feedEmpty) feedEmpty.remove();
+    document.getElementById('feedEmpty')?.remove();
 
     if (!currentUser) {
         const feed = document.getElementById('feed');
@@ -1087,10 +1099,11 @@ async function sendText(text) {
         row.className = 'msg-row bot';
         const bub = document.createElement('div');
         bub.className = 'bot-bub';
-        bub.innerHTML = '<p>Please <a href="#" onclick="openAuthOverlay()" style="color:var(--accent);text-decoration:underline;">create an account</a> to start chatting with Vexa.</p>';
+        bub.innerHTML = '<p>Please <a href="#" onclick="openAuthOverlay()" style="color:var(--accent);text-decoration:underline;">create an account</a>.</p>';
         row.appendChild(bub);
         feed.appendChild(row);
         busy = false;
+        setSendBtnState(false);
         return;
     }
 
@@ -1106,86 +1119,48 @@ async function sendText(text) {
         session = chatSessions.find(s => s.id === currentSessionId);
     }
 
-    const msgIndex = session.messages.length;
-    const hasImages = window.uploadedImages && window.uploadedImages.length > 0;
-    const capturedImages = hasImages ? [...window.uploadedImages] : [];
-
     if (editingMsgIndex !== null) {
         session.messages = session.messages.slice(0, editingMsgIndex);
         editingMsgIndex = null;
         document.getElementById('editIndicator')?.remove();
-        const feed = document.getElementById('feed');
-    } else {
-        if (hasImages) {
-            session.messages.push({ role: 'user', content: text || 'What is in this image?' });
-            addBubbleWithImages('user', text, capturedImages, msgIndex);
-
-            for (const imageUrl of capturedImages) {
-                try {
-                    let blob = null;
-                    if (imageUrl.startsWith('data:')) {
-                        const response = await fetch(imageUrl);
-                        blob = await response.blob();
-                    } else {
-                        const response = await fetch(imageUrl.startsWith('/') ? CONFIG.BASE + imageUrl : imageUrl);
-                        if (response.ok) {
-                            blob = await response.blob();
-                        }
-                    }
-
-                    if (blob) {
-                        if (typeof saveMyImage === 'function') {
-                            await saveMyImage(imageUrl, 'User uploaded image', blob);
-                        }
-                    }
-                } catch (error) {
-                    console.error('Failed to save uploaded image to Firebase:', error);
-                }
-            }
-        } else {
-            session.messages.push({ role: 'user', content: text });
-            addBubble('user', text, msgIndex);
-        }
     }
 
+    session.messages.push({ role: 'user', content: text });
+    addBubble('user', text);
     const loading = addLoading();
 
     let aiReply = null;
     try {
-        if (typeof closeImageOutput === 'function') {
-            closeImageOutput();
-        }
+        if (typeof closeImageOutput === 'function') closeImageOutput();
 
-        if (hasImages) {
+        if (window.uploadedImages?.length > 0) {
             aiReply = await sendChatWithImages(text, window.uploadedImages, loading, session);
             window.uploadedImages = [];
             document.getElementById('inputImagesRow')?.remove();
-            document.querySelectorAll('.input-image-preview').forEach(p => p.remove());
-            const inp = document.getElementById('inp');
-            if (inp) inp.placeholder = 'Ask anything';
-            if (typeof updateAttachBtnIcon === 'function') updateAttachBtnIcon();
+            const inpEl = document.getElementById('inp');
+            if (inpEl) inpEl.placeholder = 'Ask anything';
         } else if (window.isDeepResearch && window.isDeepResearch()) {
             aiReply = await sendDeepResearch(text, loading, session);
         } else if (window.isThinkingMode && window.isThinkingMode()) {
             aiReply = await sendChatTextWithThinking(text, loading, session);
         } else if (isImg(text)) {
             aiReply = await sendChatImage(cleanImgPrompt(text), loading);
+        } else if (isSearchMode && isSearchMode()) {
+            aiReply = await sendChatTextWithSearch(text, loading, session);
         } else {
             aiReply = await sendChatText(text, loading, session);
         }
     } catch (err) {
-        swapText(loading, 'Error - ' + (err.message || 'try again.'));
+        if (err.name === 'AbortError' || err.message?.includes('aborted')) {
+            swapText(loading, 'Chat stopped');
+        } else {
+            swapText(loading, 'Error - ' + (err.message || 'try again.'));
+        }
     }
 
     if (aiReply) {
-        const replyContent = typeof aiReply === 'object' ? aiReply : aiReply;
-        if (typeof replyContent === 'object' && replyContent.type === 'image') {
-            session.messages.push({ role: 'assistant', content: replyContent });
-        } else {
-            session.messages.push({ role: 'assistant', content: replyContent });
-        }
-        const s = getVexaSettings ? getVexaSettings() : {};
-        if (s.autoTitle !== false && session.messages.filter(m => m.role === 'user').length === 1) {
+        session.messages.push({ role: 'assistant', content: aiReply });
+        if (session.messages.filter(m => m.role === 'user').length === 1) {
             const aiTitle = await generateChatTitle(text, typeof aiReply === 'string' ? aiReply : '');
             if (aiTitle) {
                 session.title = aiTitle;
@@ -1196,17 +1171,11 @@ async function sendText(text) {
     }
 
     busy = false;
-    const sbtn = document.getElementById('sbtn');
-    const inp = document.getElementById('inp');
-    if (sbtn) sbtn.disabled = !inp?.value.trim();
-    if (inp) inp.focus();
+    currentAbortController = null;
+    setSendBtnState(false);
+    document.getElementById('inp')?.focus();
     const feed = document.getElementById('feed');
-    if (feed) {
-        feed.scrollTo({
-            top: feed.scrollHeight,
-            behavior: 'smooth'
-        });
-    }
+    if (feed) feed.scrollTo({ top: feed.scrollHeight, behavior: 'smooth' });
 }
 
 async function sendImagePrompt(prompt) {
@@ -1236,7 +1205,11 @@ async function sendImagePrompt(prompt) {
     try {
         aiReply = await sendChatImage(prompt, loading);
     } catch (err) {
-        swapText(loading, 'Error - ' + (err.message || 'try again.'));
+        if (err.name === 'AbortError' || err.message?.includes('aborted')) {
+            swapText(loading, 'Request cancelled. Please try again.');
+        } else {
+            swapText(loading, 'Error - ' + (err.message || 'try again.'));
+        }
     }
 
     if (aiReply) {
@@ -1257,17 +1230,12 @@ async function sendImagePrompt(prompt) {
     }
 
     busy = false;
-    const sbtn = document.getElementById('sbtn');
+    currentAbortController = null;
+    setSendBtnState(false);
     const inp = document.getElementById('inp');
-    if (sbtn) sbtn.disabled = !inp?.value.trim();
     if (inp) inp.focus();
     const feed = document.getElementById('feed');
-    if (feed) {
-        feed.scrollTo({
-            top: feed.scrollHeight,
-            behavior: 'smooth'
-        });
-    }
+    if (feed) feed.scrollTo({ top: feed.scrollHeight, behavior: 'smooth' });
 }
 
 async function loadSessionIntoChat(session) {
@@ -1431,8 +1399,6 @@ function initChat() {
     inp.addEventListener('input', () => {
         inp.style.height = 'auto';
         inp.style.height = Math.min(inp.scrollHeight, 160) + 'px';
-        sbtn.disabled = !inp.value.trim() || busy;
-
         const inputBox = document.querySelector('.input-box');
         if (inputBox) {
             const minHeight = 24;
@@ -1444,6 +1410,7 @@ function initChat() {
             const newRadius = baseRadius - (progress * (baseRadius - minRadius));
             inputBox.style.borderRadius = newRadius + 'vh';
         }
+        sbtn.disabled = !inp.value.trim();
     });
 
     function shouldSendOnEnter() {
@@ -1470,17 +1437,37 @@ function initChat() {
     initSearch();
 }
 
+function setSendBtnState(isGenerating) {
+    const sbtn = document.getElementById('sbtn');
+    const inp = document.getElementById('inp');
+    if (!sbtn) return;
+
+    if (isGenerating) {
+        sbtn.disabled = false;
+        sbtn.innerHTML = '<i class="fa-solid fa-stop" style="font-size:13px"></i>';
+        sbtn.classList.add('stop-mode');
+    } else {
+        sbtn.innerHTML = '<i class="fa-solid fa-arrow-up" style="font-size:13px"></i>';
+        sbtn.classList.remove('stop-mode');
+        sbtn.disabled = !inp?.value.trim();
+    }
+}
+
 function doSend() {
     const inp = document.getElementById('inp');
+    if (busy) {
+        if (currentAbortController) {
+            currentAbortController.abort();
+            setSendBtnState(false);
+        }
+        return;
+    }
     const text = inp.value.trim();
-    if (!text || busy) return;
+    if (!text) return;
     inp.value = '';
     inp.style.height = 'auto';
     const inputBox = document.querySelector('.input-box');
-    if (inputBox) {
-        inputBox.style.borderRadius = '3vh';
-    }
-    document.getElementById('sbtn').disabled = true;
+    if (inputBox) inputBox.style.borderRadius = '3vh';
     sendText(text);
 }
 

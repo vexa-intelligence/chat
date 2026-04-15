@@ -1,6 +1,17 @@
 const THINKING_STEPS_MAX = 8;
 const RESEARCH_SOURCES_COUNT = 6;
 
+async function getFavicon(url) {
+    try {
+        const urlObj = new URL(url);
+        const domain = urlObj.hostname.replace('www.', '');
+        const cleanDomain = domain.replace(/\/+$/, '');
+        return `https://favicon.vemetric.com/${cleanDomain}`;
+    } catch {
+        return null;
+    }
+}
+
 async function sendChatTextWithThinking(userMessage, loading, session) {
     const history = buildConversationHistory(session);
 
@@ -177,17 +188,26 @@ async function sendDeepResearch(userMessage, loading, session) {
         setTimeout(() => stepEl.classList.add('done'), 100);
 
         if (i === 1 && searchResults.length) {
-            searchResults.slice(0, 4).forEach(r => {
+            const chipsPromises = searchResults.slice(0, 4).map(async r => {
                 let domain = r.url;
                 try { domain = new URL(r.url).hostname.replace('www.', ''); } catch { }
+
+                const favicon = await getFavicon(r.url);
+                const faviconHtml = favicon ? `<img src="${escHtml(favicon)}" class="search-source-favicon" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline-block';">` : '';
+                const fallbackIcon = `<i class="fa-solid fa-link" style="font-size:9px;${favicon ? 'display:none;' : ''}"></i>`;
+
                 const chip = document.createElement('a');
                 chip.href = r.url;
                 chip.target = '_blank';
                 chip.rel = 'noopener noreferrer';
                 chip.className = 'dr-source-chip';
-                chip.innerHTML = `<i class="fa-solid fa-link" style="font-size:9px"></i> ${escHtml(domain)}`;
-                sourcesEl.appendChild(chip);
+                chip.innerHTML = `${faviconHtml}${fallbackIcon} ${escHtml(domain)}`;
+
+                return chip;
             });
+
+            const chips = await Promise.all(chipsPromises);
+            chips.forEach(chip => sourcesEl.appendChild(chip));
         }
 
         await new Promise(r => setTimeout(r, 700 + Math.random() * 400));
@@ -239,17 +259,27 @@ async function sendDeepResearch(userMessage, loading, session) {
         const sourceBar = document.createElement('div');
         sourceBar.className = 'dr-final-sources';
         sourceBar.innerHTML = `<span class="dr-final-sources-label"><i class="fa-solid fa-globe" style="font-size:11px;margin-right:5px;color:var(--accent)"></i>Sources</span>`;
-        searchResults.slice(0, 4).forEach(r => {
+
+        const chipsPromises = searchResults.slice(0, 4).map(async r => {
             let domain = r.url;
             try { domain = new URL(r.url).hostname.replace('www.', ''); } catch { }
+
+            const favicon = await getFavicon(r.url);
+            const faviconHtml = favicon ? `<img src="${escHtml(favicon)}" class="search-source-favicon" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline-block';">` : '';
+            const fallbackIcon = `<i class="fa-solid fa-link" style="font-size:10px;${favicon ? 'display:none;' : ''}"></i>`;
+
             const chip = document.createElement('a');
             chip.href = r.url;
             chip.target = '_blank';
             chip.rel = 'noopener noreferrer';
             chip.className = 'search-source-chip';
-            chip.innerHTML = `<i class="fa-solid fa-link" style="font-size:10px"></i> ${escHtml(domain)}`;
-            sourceBar.appendChild(chip);
+            chip.innerHTML = `${faviconHtml}${fallbackIcon} ${escHtml(domain)}`;
+
+            return chip;
         });
+
+        const chips = await Promise.all(chipsPromises);
+        chips.forEach(chip => sourceBar.appendChild(chip));
         finalBub.appendChild(sourceBar);
     }
 
@@ -625,6 +655,14 @@ function initThinkingStyles() {
         .dr-final-sources-label {
             font-size: 0.75rem;
             color: var(--muted);
+            flex-shrink: 0;
+        }
+
+        .search-source-favicon {
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+            object-fit: contain;
             flex-shrink: 0;
         }
     `;

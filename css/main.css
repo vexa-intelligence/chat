@@ -1358,6 +1358,15 @@ select {
     color: var(--muted);
 }
 
+.input-row-inline .send-btn.stop-mode {
+    background: var(--danger);
+    color: white;
+}
+
+.input-row-inline .send-btn.stop-mode:hover:not(:disabled) {
+    background: var(--danger-hover);
+}
+
 .input-left {
     display: flex;
     align-items: center;
@@ -1972,7 +1981,10 @@ select {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 18px 0;
+    padding-top: 18px;
+    padding-bottom: 18px;
+    padding-left: 10px;
+    padding-right: 10px;
     gap: 20px;
 }
 
@@ -2013,7 +2025,6 @@ select {
     cursor: pointer;
     outline: none;
     flex-shrink: 0;
-    margin-right: 10px;
 }
 
 .settings-select:focus {
@@ -2090,9 +2101,19 @@ select {
     display: flex;
     flex-direction: column;
     align-items: center;
+    justify-content: center;
     gap: 10px;
     padding: 24px 0 8px;
     text-align: center;
+    width: 100%;
+    margin: 0 auto;
+}
+
+@media (min-width: 680px) {
+    .settings-profile-header {
+        max-width: 400px;
+        margin: 0 auto;
+    }
 }
 
 .settings-profile-avatar {
@@ -2108,18 +2129,22 @@ select {
     color: white;
     overflow: hidden;
     flex-shrink: 0;
+    margin: 30px auto 0 auto;
 }
 
 .settings-profile-name {
     font-size: 1.25rem;
     font-weight: 700;
     color: var(--fg);
+    text-align: center;
+    margin: 0 auto;
 }
 
 .settings-profile-username {
     font-size: 0.875rem;
     color: var(--muted);
     margin-top: -6px;
+    text-align: center;
 }
 
 .settings-profile-edit-btn {
@@ -2131,7 +2156,10 @@ select {
     font-size: 0.8125rem;
     font-weight: 500;
     cursor: pointer;
-    margin-top: 4px;
+    margin: 4px auto 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .settings-profile-edit-btn:hover {
@@ -2157,7 +2185,7 @@ select {
     color: var(--muted);
     text-transform: uppercase;
     letter-spacing: 0.06em;
-    margin: 20px 0px 8px 20px
+    margin: 20px 0px 8px 0px;
 }
 
 .char-row {
@@ -2182,37 +2210,198 @@ select {
 
 .settings-textarea {
     width: 100%;
-    min-height: 100px;
-    background: transparent;
-    border: none;
+    min-height: 120px;
     outline: none;
+    border: none;
     resize: none;
     font-family: var(--font);
     font-size: 0.9375rem;
     color: var(--fg);
     line-height: 1.6;
+    padding: 10px 14px;
+    border-radius: var(--radius);
+    transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.settings-textarea:focus {
+    border-color: var(--accent);
+    background: var(--surface2);
 }
 
 .settings-textarea::placeholder {
     color: var(--muted);
+    opacity: 0.7;
 }
 
 .settings-inline-input {
     width: 100%;
-    border: none;
     outline: none;
-    background: transparent;
+    border: none;
     font-family: var(--font);
     font-size: 0.9375rem;
     color: var(--fg);
+    padding: 10px 14px;
+    border-radius: var(--radius);
+    transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.settings-inline-input:focus {
+    border-color: var(--accent);
+    background: var(--surface2);
 }
 
 .settings-inline-input::placeholder {
     color: var(--muted);
+    opacity: 0.7;
+}
+
+.settings-inline-group {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    height: 50px;
+    padding-right: 10px;
+}
+
+.settings-inline-group .settings-inline-input {
+    flex: 1;
+}
+
+.settings-inline-group .settings-action-btn {
+    flex-shrink: 0;
+}
+
+.settings-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.ai-theme-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    height: 50px;
+    transition: background-color 0.15s ease;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface2);
+    border-radius: var(--radius);
+    padding-left: 10px;
+    padding-right: 10px;
+}
+
+.ai-theme-card:last-child {
+    border-bottom: none;
+}
+
+.ai-theme-card:hover .ai-theme-del-btn {
+    color: var(--danger);
+    background: var(--surface3);
+}
+
+.ai-theme-btn {
+    padding: 6px 14px;
+    border-radius: var(--radius);
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--fg);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    cursor: pointer;
+    font-family: var(--font);
+    flex-shrink: 0;
+    transition: background 0.15s;
+}
+
+.ai-theme-btn:hover {
+    background: var(--surface3);
+}
+
+.ai-theme-colors {
+    display: flex;
+    gap: 5px;
+    flex-shrink: 0;
+}
+
+.ai-theme-color-dot {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 1px solid rgba(128, 128, 128, 0.3);
+}
+
+.ai-theme-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.ai-theme-name-display {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--fg);
+    cursor: text;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ai-theme-prompt {
+    font-size: 0.7rem;
+    color: var(--muted);
+    margin-top: 1px;
+}
+
+.ai-theme-apply-btn {
+    padding: 5px 12px;
+    border-radius: var(--radius);
+    font-size: 0.75rem;
+    font-weight: 600;
+    border: none;
+    cursor: pointer;
+    font-family: var(--font);
+    flex-shrink: 0;
+}
+
+.ai-theme-apply-btn.active {
+    background: var(--fg);
+    color: var(--bg);
+}
+
+.ai-theme-apply-btn.inactive {
+    background: var(--surface2);
+    color: var(--fg);
+}
+
+.ai-theme-del-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    flex-shrink: 0;
+}
+
+.ai-theme-input {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--fg);
+    background: transparent;
+    border: none;
+    outline: none;
+    border-bottom: 1px solid var(--muted);
+    width: 100%;
+    font-family: var(--font);
 }
 
 .settings-save-full-btn {
-    width: 80%;
+    width: 90%;
     padding: 14px;
     border-radius: var(--radius-lg);
     background: var(--fg);
@@ -2225,6 +2414,8 @@ select {
     margin: 0 auto;
     display: flex;
     justify-content: center;
+    margin-top: 30px;
+    margin-bottom: 50px;
 }
 
 .settings-save-full-btn:hover {
@@ -2247,12 +2438,24 @@ select {
         background: transparent;
     }
 
+    .settings-sub-title {
+        margin: 20px 0px 8px 20px;
+    }
+
+    .ai-theme-card {
+        margin: 0 16px 4px;
+    }
+
     .settings-row-label>span:first-child {
-        padding-left: 0px;
+        padding-left: 0px !important;
     }
 
     .settings-toggle {
-        margin-right: 0px;
+        margin-right: 0px !important;
+    }
+
+    .settings-select-sm {
+        margin-right: 0px !important;
     }
 
     .settings-modal {
@@ -4284,15 +4487,15 @@ body.show-timestamps .msg-timestamp {
 .settings-action-btn {
     padding: 6px 14px;
     border-radius: var(--radius);
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    color: var(--fg);
+    background: var(--fg);
+    color: var(--bg);
     font-size: 0.8125rem;
     font-weight: 500;
     cursor: pointer;
     font-family: var(--font);
     flex-shrink: 0;
     transition: background 0.15s;
+    text-decoration: none;
 }
 
 .settings-action-btn:hover {

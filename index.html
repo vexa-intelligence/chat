@@ -323,7 +323,6 @@
                     <div class="my-images-section">
                         <h3 class="images-section-title">My Images</h3>
                         <div class="my-images-grid" id="myImagesGrid">
-                            <!-- Images will be dynamically added here -->
                         </div>
                         <div class="my-images-empty" id="myImagesEmpty">
                             No images generated yet. Create your first image above!
@@ -347,18 +346,24 @@
 
     <div class="settings-modal-overlay hidden" id="settingsModalOverlay">
         <div class="settings-modal" id="settingsModal">
+
             <div class="settings-mobile-header">
                 <button class="settings-back-btn hidden" id="settingsBackBtn">
                     <i class="fa-solid fa-chevron-left"></i>
                 </button>
+
                 <span class="settings-mobile-title" id="settingsMobileTitle">Settings</span>
+
                 <button class="settings-save-btn hidden" id="settingsSaveBtn">Save</button>
+
                 <button class="settings-modal-close" id="settingsModalClose">
                     <i class="fa-solid fa-xmark"></i>
                 </button>
             </div>
+
             <div class="settings-modal-sidebar">
                 <div class="settings-modal-brand">Settings</div>
+
                 <button class="settings-tab" data-section="discord">Discord</button>
                 <button class="settings-tab active" data-section="general">General</button>
                 <button class="settings-tab" data-section="account">Account</button>
@@ -367,24 +372,18 @@
                 <button class="settings-tab" data-section="ai">AI & Response</button>
                 <button class="settings-tab" data-section="data">Data</button>
             </div>
+
             <div class="settings-modal-body">
+
                 <div class="settings-section active" id="settings-general">
                     <h2 class="settings-section-title">General</h2>
+
                     <div class="settings-card">
-                        <div class="settings-row">
-                            <div class="settings-row-label">
-                                <span>Default model</span>
-                                <small>Used for new conversations</small>
-                            </div>
-                            <select class="settings-select" id="defaultModelSelect">
-                                <option value="">Auto</option>
-                            </select>
-                        </div>
+
                         <div class="settings-row">
                             <div class="settings-row-label">
                                 <span>Send on Enter</span>
-                                <span class="settings-row-sub">Press Enter to send (Shift+Enter for new line). When off,
-                                    use Ctrl+Enter.</span>
+                                <small>Shift+Enter for new line. Ctrl+Enter when disabled.</small>
                             </div>
                             <label class="settings-toggle">
                                 <input type="checkbox" id="sendOnEnterToggle" checked>
@@ -395,8 +394,7 @@
                         <div class="settings-row">
                             <div class="settings-row-label">
                                 <span>Auto-title chats</span>
-                                <span class="settings-row-sub">Automatically generate a title after the first
-                                    message</span>
+                                <small>Generate title after first message</small>
                             </div>
                             <label class="settings-toggle">
                                 <input type="checkbox" id="autoTitleToggle" checked>
@@ -407,7 +405,7 @@
                         <div class="settings-row">
                             <div class="settings-row-label">
                                 <span>Show timestamps</span>
-                                <span class="settings-row-sub">Display send time on each message</span>
+                                <small>Display message send time</small>
                             </div>
                             <label class="settings-toggle">
                                 <input type="checkbox" id="showTimestampsToggle">
@@ -418,40 +416,52 @@
                         <div class="settings-row">
                             <div class="settings-row-label">
                                 <span>Typing animation</span>
-                                <span class="settings-row-sub">Show animated typing indicator while AI responds</span>
+                                <small>Show AI typing indicator</small>
                             </div>
                             <label class="settings-toggle">
                                 <input type="checkbox" id="streamingToggle" checked>
                                 <span class="settings-toggle-track"></span>
                             </label>
                         </div>
+
                     </div>
                 </div>
+
                 <div class="settings-section" id="settings-discord">
                     <h2 class="settings-section-title">Discord</h2>
+
                     <div class="settings-card">
                         <div class="settings-row">
                             <div class="settings-row-label">
-                                <span>Join our Discord</span>
-                                <small>Connect your Discord account to Vexa</small>
+                                <span>Community</span>
+                                <small>Join our Discord server</small>
                             </div>
-                            <a href="https://discord.com/invite/D5cwKYd" target="_blank" class="settings-btn">Join
-                                Discord</a>
+                            <a href="https://discord.com/invite/D5cwKYd" target="_blank" class="settings-action-btn">
+                                Join
+                            </a>
                         </div>
                     </div>
                 </div>
+
                 <div class="settings-section" id="settings-account">
-                    <div class="settings-profile-header" id="settingsProfileHeader"></div>
-                    <h2 class="settings-section-title" style="margin-top:20px">Account</h2>
+                    <h2 class="settings-section-title">Account</h2>
+
+                    <div class="settings-card">
+                        <div id="settingsProfileHeader"></div>
+                    </div>
+
                     <div class="settings-card" id="accountContent"></div>
                 </div>
+
                 <div class="settings-section" id="settings-appearance">
                     <h2 class="settings-section-title">Appearance</h2>
+
                     <div class="settings-card">
+
                         <div class="settings-row">
                             <div class="settings-row-label">
                                 <span>Theme</span>
-                                <small>Choose your color theme</small>
+                                <small>Color theme</small>
                             </div>
                             <select class="settings-select" id="themeSelect">
                                 <option value="light">Light</option>
@@ -459,10 +469,11 @@
                                 <option value="system">System</option>
                             </select>
                         </div>
+
                         <div class="settings-row">
                             <div class="settings-row-label">
                                 <span>Font size</span>
-                                <small>Adjust the text size</small>
+                                <small>Text scaling</small>
                             </div>
                             <select class="settings-select" id="fontSizeSelect">
                                 <option value="14">Small</option>
@@ -470,107 +481,36 @@
                                 <option value="16">Large</option>
                             </select>
                         </div>
+
                     </div>
 
                     <h3 class="settings-sub-title">AI Themes</h3>
-                    <div class="settings-card" style="margin: 20px 0px 8px 20px">
-                        <div style="display:flex;gap:10px;align-items:center">
+                    <div class="settings-card">
+                        <div class="settings-inline-group">
                             <input type="text" id="aiThemePrompt" class="settings-inline-input"
-                                placeholder="e.g. ocean sunset, forest at night, neon cyberpunk...">
-                            <button id="aiThemeGenBtn"
-                                style="flex-shrink:0;padding:8px 16px;border-radius:var(--radius);background:var(--fg);color:var(--bg);font-size:0.8125rem;font-weight:600;border:none;cursor:pointer;font-family:var(--font);white-space:nowrap;">Generate</button>
+                                placeholder="ocean sunset, neon cyberpunk...">
+
+                            <button id="aiThemeGenBtn" class="settings-action-btn">
+                                Generate
+                            </button>
                         </div>
-                        <div id="aiThemeStatus"
-                            style="font-size:0.75rem;color:var(--muted);margin-top:8px;min-height:16px;display:none;">
-                        </div>
+
+                        <div id="aiThemeStatus" class="settings-status"></div>
                     </div>
 
-                    <div id="aiThemesList" style="display:flex;flex-direction:column;gap:8px;"></div>
+                    <div id="aiThemesList" class="settings-list"></div>
                 </div>
-                <div class="settings-section" id="settings-ai">
-                    <div class="settings-section-title">AI & Response</div>
 
-                    <div class="settings-group-label">Model</div>
-                    <div class="settings-row">
-                        <div class="settings-row-label">
-                            <span>Default model</span>
-                            <span class="settings-row-sub">Used for new chats</span>
-                        </div>
-                        <select id="defaultModelSettingSelect" class="settings-select">
-                            <option value="">Auto</option>
-                        </select>
-                    </div>
-
-                    <div class="settings-group-label" style="margin-top:18px">Response</div>
-                    <div class="settings-row">
-                        <div class="settings-row-label">
-                            <span>Response length</span>
-                            <span class="settings-row-sub">How long AI replies should be</span>
-                        </div>
-                        <select id="responseLengthSelect" class="settings-select">
-                            <option value="short">Short</option>
-                            <option value="balanced" selected>Balanced</option>
-                            <option value="detailed">Detailed</option>
-                        </select>
-                    </div>
-                    <div class="settings-row">
-                        <div class="settings-row-label">
-                            <span>Response language</span>
-                            <span class="settings-row-sub">Language the AI replies in</span>
-                        </div>
-                        <select id="responseLangSelect" class="settings-select">
-                            <option value="auto" selected>Auto (match input)</option>
-                            <option value="English">English</option>
-                            <option value="Spanish">Spanish</option>
-                            <option value="French">French</option>
-                            <option value="German">German</option>
-                            <option value="Portuguese">Portuguese</option>
-                            <option value="Italian">Italian</option>
-                            <option value="Dutch">Dutch</option>
-                            <option value="Russian">Russian</option>
-                            <option value="Chinese">Chinese</option>
-                            <option value="Japanese">Japanese</option>
-                            <option value="Korean">Korean</option>
-                            <option value="Arabic">Arabic</option>
-                            <option value="Hindi">Hindi</option>
-                        </select>
-                    </div>
-
-                    <div class="settings-group-label" style="margin-top:18px">Memory</div>
-                    <div class="settings-row">
-                        <div class="settings-row-label">
-                            <span>AI memory</span>
-                            <span class="settings-row-sub">Include saved facts about you in every chat</span>
-                        </div>
-                        <label class="settings-toggle">
-                            <input type="checkbox" id="memoryToggle">
-                            <span class="settings-toggle-track"></span>
-                        </label>
-                    </div>
-
-                    <div class="settings-group-label" style="margin-top:18px">System prompt</div>
-                    <div class="settings-row"
-                        style="flex-direction:column;align-items:flex-start;gap:10px;border-bottom:none">
-                        <div class="settings-row-label">
-                            <span>Custom system prompt</span>
-                            <span class="settings-row-sub">Overrides the default AI persona. Leave blank to use
-                                personalization
-                                settings.</span>
-                        </div>
-                        <textarea id="systemPromptTextarea" rows="5"
-                            placeholder="e.g. You are a senior software engineer. Be terse and use code examples."
-                            style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:var(--radius);border:1px solid var(--border);background:var(--surface);color:var(--fg);font-family:var(--font);font-size:0.8125rem;resize:vertical;line-height:1.5;outline:none;"></textarea>
-                        <button id="saveSystemPromptBtn" class="settings-save-btn"
-                            style="align-self:flex-end">Save</button>
-                    </div>
-                </div>
                 <div class="settings-section" id="settings-personalization">
                     <h2 class="settings-section-title">Personalization</h2>
-                    <div class="settings-card" style="margin-bottom:16px">
-                        <div class="settings-row" style="border-bottom:none">
+
+                    <h3 class="settings-sub-title">Style</h3>
+                    <div class="settings-card">
+
+                        <div class="settings-row">
                             <div class="settings-row-label">
-                                <span>Base style and tone</span>
-                                <small>Main voice used in conversations</small>
+                                <span>Base tone</span>
+                                <small>Main response style</small>
                             </div>
                             <select class="settings-select" id="baseToneSelect">
                                 <option value="balanced">Balanced</option>
@@ -580,104 +520,199 @@
                                 <option value="detailed">Detailed</option>
                             </select>
                         </div>
-                    </div>
-                    <h3 class="settings-sub-title">Characteristics</h3>
-                    <div class="settings-card" style="margin-bottom:16px">
-                        <div class="settings-row char-row">
-                            <span>Warm</span>
-                            <select class="settings-select settings-select-sm" id="charWarm">
-                                <option value="default">Default</option>
-                                <option value="more">More</option>
-                                <option value="less">Less</option>
-                            </select>
-                        </div>
-                        <div class="settings-row char-row">
-                            <span>Enthusiastic</span>
-                            <select class="settings-select settings-select-sm" id="charEnthusiastic">
-                                <option value="default">Default</option>
-                                <option value="more">More</option>
-                                <option value="less">Less</option>
-                            </select>
-                        </div>
-                        <div class="settings-row char-row">
-                            <span>Headers &amp; Lists</span>
-                            <select class="settings-select settings-select-sm" id="charHeaders">
-                                <option value="default">Default</option>
-                                <option value="more">More</option>
-                                <option value="less">Less</option>
-                            </select>
-                        </div>
-                        <div class="settings-row char-row">
-                            <span>Emoji</span>
-                            <select class="settings-select settings-select-sm" id="charEmoji">
-                                <option value="default">Default</option>
-                                <option value="more">More</option>
-                                <option value="less">Less</option>
-                            </select>
-                        </div>
-                        <div class="settings-row char-row" style="border-bottom:none">
-                            <span>Humor</span>
-                            <select class="settings-select settings-select-sm" id="charHumor">
-                                <option value="default">Default</option>
-                                <option value="more">More</option>
-                                <option value="less">Less</option>
-                            </select>
-                        </div>
-                    </div>
-                    <h3 class="settings-sub-title">Custom instructions</h3>
-                    <div class="settings-card" style="margin: 20px 0px 8px 20px">
-                        <textarea id="customInstructions" class="settings-textarea"
-                            placeholder="I want you to respond with absolute clarity and precision..."></textarea>
-                    </div>
-                    <h3 class="settings-sub-title">Your nickname</h3>
-                    <div class="settings-card" style="margin-bottom:16px">
-                        <div class="settings-row" style="border-bottom:none">
-                            <input type="text" id="userNickname" class="settings-inline-input"
-                                placeholder="What should Vexa call you?">
-                        </div>
-                    </div>
-                    <h3 class="settings-sub-title">About you</h3>
-                    <div class="settings-card" style="margin-bottom:24px;padding:14px 16px">
-                        <textarea id="aboutUser" class="settings-textarea"
-                            placeholder="Tell Vexa about yourself, your job, interests, or preferences..."></textarea>
-                    </div>
-                    <button class="settings-save-full-btn" id="savePersonalizationBtn">Save preferences</button>
-                </div>
-                <div class="settings-section" id="settings-data">
-                    <h2 class="settings-section-title">Data controls</h2>
-                    <div class="settings-group-label">Usage</div>
-                    <div id="usageStatsContent">
+
                     </div>
 
-                    <div class="settings-group-label" style="margin-top:18px">Export & delete</div>
-                    <div class="settings-row">
-                        <div class="settings-row-label">
-                            <span>Export all chats</span>
-                            <span class="settings-row-sub">Download your chat history as a JSON file</span>
+                    <h3 class="settings-sub-title">Characteristics</h3>
+                    <div class="settings-card">
+
+                        <div class="settings-row">
+                            <span>Warm</span>
+                            <select class="settings-select settings-select-sm" id="charWarm"></select>
                         </div>
-                        <button id="exportChatsBtn" class="settings-action-btn">Export</button>
+
+                        <div class="settings-row">
+                            <span>Enthusiastic</span>
+                            <select class="settings-select settings-select-sm" id="charEnthusiastic"></select>
+                        </div>
+
+                        <div class="settings-row">
+                            <span>Structured</span>
+                            <select class="settings-select settings-select-sm" id="charHeaders"></select>
+                        </div>
+
+                        <div class="settings-row">
+                            <span>Emoji</span>
+                            <select class="settings-select settings-select-sm" id="charEmoji"></select>
+                        </div>
+
+                        <div class="settings-row">
+                            <span>Humor</span>
+                            <select class="settings-select settings-select-sm" id="charHumor"></select>
+                        </div>
+
+                    </div>
+
+                    <h3 class="settings-sub-title">Instructions</h3>
+                    <div class="settings-card">
+                        <textarea id="customInstructions" class="settings-textarea"></textarea>
+                    </div>
+
+                    <h3 class="settings-sub-title">Identity</h3>
+                    <div class="settings-card">
+                        <input type="text" id="userNickname" class="settings-inline-input" placeholder="Nickname">
+                    </div>
+
+                    <h3 class="settings-sub-title">About</h3>
+                    <div class="settings-card">
+                        <textarea id="aboutUser" class="settings-textarea"></textarea>
+                    </div>
+
+                    <button class="settings-save-full-btn" id="savePersonalizationBtn">
+                        Save preferences
+                    </button>
+                </div>
+
+                <div class="settings-section" id="settings-ai">
+                    <h2 class="settings-section-title">AI & Response</h2>
+
+                    <h3 class="settings-sub-title">Model</h3>
+                    <div class="settings-card">
+                        <div class="settings-row">
+                            <div class="settings-row-label">
+                                <span>Default model</span>
+                                <small>Used for new chats</small>
+                            </div>
+                            <select id="defaultModelSettingSelect" class="settings-select">
+                                <option value="">Auto</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <h3 class="settings-sub-title">Response</h3>
+                    <div class="settings-card">
+
+                        <div class="settings-row">
+                            <div class="settings-row-label">
+                                <span>Length</span>
+                                <small>Reply verbosity</small>
+                            </div>
+                            <select id="responseLengthSelect" class="settings-select">
+                                <option value="short">Short</option>
+                                <option value="balanced" selected>Balanced</option>
+                                <option value="detailed">Detailed</option>
+                            </select>
+                        </div>
+
+                        <div class="settings-row">
+                            <div class="settings-row-label">
+                                <span>Language</span>
+                                <small>Output language</small>
+                            </div>
+                            <select id="responseLangSelect" class="settings-select">
+                                <option value="auto" selected>Auto</option>
+                                <option value="English">English</option>
+                                <option value="Spanish">Spanish</option>
+                                <option value="French">French</option>
+                                <option value="German">German</option>
+                                <option value="Portuguese">Portuguese</option>
+                                <option value="Italian">Italian</option>
+                                <option value="Dutch">Dutch</option>
+                                <option value="Russian">Russian</option>
+                                <option value="Chinese">Chinese</option>
+                                <option value="Japanese">Japanese</option>
+                                <option value="Korean">Korean</option>
+                                <option value="Arabic">Arabic</option>
+                                <option value="Hindi">Hindi</option>
+                            </select>
+                        </div>
+
+                    </div>
+
+                    <h3 class="settings-sub-title">Memory</h3>
+                    <div class="settings-card">
+                        <div class="settings-row">
+                            <div class="settings-row-label">
+                                <span>Memory</span>
+                                <small>Use saved context across chats</small>
+                            </div>
+                            <label class="settings-toggle">
+                                <input type="checkbox" id="memoryToggle">
+                                <span class="settings-toggle-track"></span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <h3 class="settings-sub-title">System prompt</h3>
+                    <div class="settings-card">
+                        <div class="settings-row">
+                            <div class="settings-row-label">
+                                <span>Custom prompt</span>
+                                <small>Overrides default behavior</small>
+                            </div>
+                        </div>
+
+                        <div class="settings-row">
+                            <textarea id="systemPromptTextarea" rows="5" class="settings-textarea"
+                                placeholder="Define system behavior..."></textarea>
+                        </div>
+
+                        <div class="settings-row">
+                            <button id="saveSystemPromptBtn" class="settings-save-full-btn">
+                                Save
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="settings-section" id="settings-data">
+                    <h2 class="settings-section-title">Data controls</h2>
+
+                    <h3 class="settings-sub-title">Usage</h3>
+                    <div class="settings-card">
+                        <div id="usageStatsContent"></div>
+                    </div>
+
+                    <h3 class="settings-sub-title">Export</h3>
+                    <div class="settings-card">
+                        <div class="settings-row">
+                            <div class="settings-row-label">
+                                <span>Export chats</span>
+                                <small>Download JSON backup</small>
+                            </div>
+                            <button id="exportChatsBtn" class="settings-action-btn">
+                                Export
+                            </button>
+                        </div>
+                    </div>
+
+                    <h3 class="settings-sub-title">Danger zone</h3>
+
+                    <div class="settings-card">
+                        <div class="settings-row">
+                            <div class="settings-row-label">
+                                <span>Delete images</span>
+                                <small>Permanently remove generated images</small>
+                            </div>
+                            <button id="deleteAllImagesBtn" class="settings-danger-btn">
+                                Delete
+                            </button>
+                        </div>
                     </div>
 
                     <div class="settings-card">
                         <div class="settings-row">
                             <div class="settings-row-label">
-                                <span style="color:var(--danger)">Delete all images</span>
-                                <span class="settings-row-sub">Permanently delete all generated images</span>
+                                <span>Clear chats</span>
+                                <small>Permanently delete chat history</small>
                             </div>
-                            <button id="deleteAllImagesBtn" class="settings-danger-btn">Delete all</button>
-                        </div>
-                    </div>
-
-                    <div class="settings-card">
-                        <div class="settings-row" style="border-bottom:none">
-                            <div class="settings-row-label">
-                                <span>Clear all chats</span>
-                                <small>Permanently delete all your chat history</small>
-                            </div>
-                            <button class="settings-danger-btn" id="clearChatsBtn">Clear all</button>
+                            <button id="clearChatsBtn" class="settings-danger-btn">
+                                Clear
+                            </button>
                         </div>
                     </div>
                 </div>
+
             </div>
         </div>
     </div>

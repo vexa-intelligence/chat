@@ -1,5 +1,18 @@
 const CYRON_BASE = 'https://cyron.pages.dev';
 
+async function getFavicon(url) {
+    try {
+        const urlObj = new URL(url);
+        const domain = urlObj.hostname.replace('www.', '');
+        const cleanDomain = domain.replace(/\/+$/, '');
+        const faviconUrl = `https://favicon.vemetric.com/${cleanDomain}`;
+        return faviconUrl;
+    } catch (e) {
+        console.error('Favicon error:', e);
+        return null;
+    }
+}
+
 const VISIT_PROXIES = [
     {
         name: 'allorigins',
@@ -115,19 +128,44 @@ function updateSearchStatus(text) {
     if (el) el.textContent = text;
 }
 
-function addSearchSourcesBar(results) {
+async function addSearchSourcesBar(results) {
     if (!results || !results.length) return;
     const feed = document.getElementById('feed');
     const bar = document.createElement('div');
     bar.className = 'msg-row bot';
     const bub = document.createElement('div');
     bub.className = 'bot-bub search-sources-bub';
-    const chips = results.slice(0, 4).map(r => {
+
+    const sourcesRow = document.createElement('div');
+    sourcesRow.className = 'search-sources-row';
+
+    const label = document.createElement('span');
+    label.className = 'search-sources-label';
+    label.innerHTML = '<i class="fa-solid fa-globe" style="font-size:11px;margin-right:4px;color:var(--accent)"></i>Sources';
+    sourcesRow.appendChild(label);
+
+    const chipsPromises = results.slice(0, 4).map(async r => {
         let domain = '';
         try { domain = new URL(r.url).hostname.replace('www.', ''); } catch { domain = r.url; }
-        return '<a href="' + escHtml(r.url) + '" target="_blank" rel="noopener noreferrer" class="search-source-chip"><i class="fa-solid fa-link" style="font-size:10px"></i> ' + escHtml(domain) + '</a>';
-    }).join('');
-    bub.innerHTML = '<div class="search-sources-row"><span class="search-sources-label"><i class="fa-solid fa-globe" style="font-size:11px;margin-right:4px;color:var(--accent)"></i>Sources</span>' + chips + '</div>';
+
+        const favicon = await getFavicon(r.url);
+        const faviconHtml = favicon ? `<img src="${escHtml(favicon)}" class="search-source-favicon" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline-block';">` : '';
+        const fallbackIcon = `<i class="fa-solid fa-link" style="font-size:10px;${favicon ? 'display:none;' : ''}"></i>`;
+
+        const chip = document.createElement('a');
+        chip.href = escHtml(r.url);
+        chip.target = '_blank';
+        chip.rel = 'noopener noreferrer';
+        chip.className = 'search-source-chip';
+        chip.innerHTML = `${faviconHtml}${fallbackIcon} ${escHtml(domain)}`;
+
+        return chip;
+    });
+
+    const chips = await Promise.all(chipsPromises);
+    chips.forEach(chip => sourcesRow.appendChild(chip));
+
+    bub.appendChild(sourcesRow);
     bar.appendChild(bub);
     feed.appendChild(bar);
 }
@@ -209,16 +247,38 @@ function updateVisitStatus(text) {
     if (el) el.textContent = text;
 }
 
-function addVisitedBar(url, title) {
+async function addVisitedBar(url, title) {
     const feed = document.getElementById('feed');
     const bar = document.createElement('div');
     bar.className = 'msg-row bot';
     const bub = document.createElement('div');
     bub.className = 'bot-bub search-sources-bub';
+
+    const sourcesRow = document.createElement('div');
+    sourcesRow.className = 'search-sources-row';
+
+    const label = document.createElement('span');
+    label.className = 'search-sources-label';
+    label.innerHTML = '<i class="fa-solid fa-earth-americas" style="font-size:11px;margin-right:4px;color:var(--accent)"></i>Visited';
+    sourcesRow.appendChild(label);
+
     let domain = '';
     try { domain = new URL(url).hostname.replace('www.', ''); } catch { domain = url; }
     const displayTitle = title ? escHtml(title.slice(0, 50)) : escHtml(domain);
-    bub.innerHTML = '<div class="search-sources-row"><span class="search-sources-label"><i class="fa-solid fa-earth-americas" style="font-size:11px;margin-right:4px;color:var(--accent)"></i>Visited</span><a href="' + escHtml(url) + '" target="_blank" rel="noopener noreferrer" class="search-source-chip"><i class="fa-solid fa-link" style="font-size:10px"></i> ' + displayTitle + '</a></div>';
+
+    const favicon = await getFavicon(url);
+    const faviconHtml = favicon ? `<img src="${escHtml(favicon)}" class="search-source-favicon" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline-block';">` : '';
+    const fallbackIcon = `<i class="fa-solid fa-link" style="font-size:10px;${favicon ? 'display:none;' : ''}"></i>`;
+
+    const chip = document.createElement('a');
+    chip.href = escHtml(url);
+    chip.target = '_blank';
+    chip.rel = 'noopener noreferrer';
+    chip.className = 'search-source-chip';
+    chip.innerHTML = `${faviconHtml}${fallbackIcon} ${displayTitle}`;
+
+    sourcesRow.appendChild(chip);
+    bub.appendChild(sourcesRow);
     bar.appendChild(bub);
     feed.appendChild(bar);
 }
@@ -231,10 +291,8 @@ async function tryGetVisitContext(userMessage) {
     try {
         const { title, text } = await fetchPageText(url);
         updateVisitStatus('Page loaded');
-        await new Promise(r => setTimeout(r, 300));
+        await new Promise(r => setTimeout(r, 350));
         removeVisitStatusBubble();
-        addVisitedBar(url, title);
-        scrollBottom();
         const ctx = buildVisitContext(url, title, text);
         return ctx;
     } catch (err) {
@@ -302,11 +360,6 @@ async function sendChatTextWithSearch(userMessage, loading, session) {
     await new Promise(r => setTimeout(r, 350));
     removeSearchStatusBubble();
 
-    if (searchResults.length) {
-        addSearchSourcesBar(searchResults);
-        scrollBottom();
-    }
-
     const history = buildConversationHistory(session);
     const systemContent = buildSystemPrompt();
 
@@ -343,6 +396,35 @@ async function sendChatTextWithSearch(userMessage, loading, session) {
     const m = reply.match(/<think>([\s\S]*?)<\/think>/i);
     if (m) { think = m[1].trim(); reply = reply.replace(/<think>[\s\S]*?<\/think>/gi, '').trim(); }
 
+    if (searchResults.length) {
+        const sourcesWithFavicons = await Promise.all(
+            searchResults.slice(0, 4).map(async r => {
+                let domain = '';
+                try { domain = new URL(r.url).hostname.replace('www.', ''); } catch { domain = r.url; }
+
+                const favicon = await getFavicon(r.url);
+                const faviconHtml = favicon ? `<img src="${escHtml(favicon)}" class="search-source-favicon" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline-block';">` : '';
+                const fallbackIcon = `<i class="fa-solid fa-link" style="font-size:10px;${favicon ? 'display:none;' : ''}"></i>`;
+
+                return {
+                    url: r.url,
+                    domain: domain,
+                    faviconHtml: faviconHtml + fallbackIcon
+                };
+            })
+        );
+
+        let sourcesHtml = '<div class="search-sources-bub"><div class="search-sources-row">';
+        sourcesHtml += '<span class="search-sources-label"><i class="fa-solid fa-globe" style="font-size:11px;margin-right:4px;color:var(--accent)"></i>Sources</span>';
+
+        sourcesWithFavicons.forEach(r => {
+            sourcesHtml += `<a href="${escHtml(r.url)}" target="_blank" rel="noopener noreferrer" class="search-source-chip">${r.faviconHtml} ${escHtml(r.domain)}</a>`;
+        });
+
+        sourcesHtml += '</div></div>';
+        reply += '\n\n' + sourcesHtml;
+    }
+
     await typewriterSwap(loading, reply, think);
     return reply;
 }
@@ -373,6 +455,7 @@ function initSearchMode() {
             padding: 8px 12px;
             background: var(--surface);
             border-radius: var(--radius-lg);
+            margin-top: 20px;
         }
         .search-sources-row {
             display: flex;
@@ -401,6 +484,13 @@ function initSearchMode() {
         .search-source-chip:hover {
             background: var(--surface3);
             color: var(--fg);
+        }
+        .search-source-favicon {
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+            object-fit: contain;
+            flex-shrink: 0;
         }
     `;
     document.head.appendChild(style);
@@ -466,7 +556,11 @@ function initSearchMode() {
         } catch (err) {
             removeSearchStatusBubble();
             removeVisitStatusBubble();
-            swapText(loading, 'Error - ' + (err.message || 'try again.'));
+            if (err.name === 'AbortError' || err.message?.includes('aborted')) {
+                swapText(loading, 'Chat stopped');
+            } else {
+                swapText(loading, 'Error - ' + (err.message || 'try again.'));
+            }
         }
 
         if (aiReply) {

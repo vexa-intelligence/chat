@@ -248,8 +248,69 @@ function exportAllChats() {
     URL.revokeObjectURL(url);
 }
 
+function populateCharacteristicsDropdowns() {
+    const characteristics = [
+        {
+            id: 'charWarm', options: [
+                { value: 'default', text: 'Default' },
+                { value: 'low', text: 'Low' },
+                { value: 'medium', text: 'Medium' },
+                { value: 'high', text: 'High' }
+            ]
+        },
+        {
+            id: 'charEnthusiastic', options: [
+                { value: 'default', text: 'Default' },
+                { value: 'low', text: 'Low' },
+                { value: 'medium', text: 'Medium' },
+                { value: 'high', text: 'High' }
+            ]
+        },
+        {
+            id: 'charHeaders', options: [
+                { value: 'default', text: 'Default' },
+                { value: 'low', text: 'Low' },
+                { value: 'medium', text: 'Medium' },
+                { value: 'high', text: 'High' }
+            ]
+        },
+        {
+            id: 'charEmoji', options: [
+                { value: 'default', text: 'Default' },
+                { value: 'none', text: 'None' },
+                { value: 'low', text: 'Low' },
+                { value: 'medium', text: 'Medium' },
+                { value: 'high', text: 'High' }
+            ]
+        },
+        {
+            id: 'charHumor', options: [
+                { value: 'default', text: 'Default' },
+                { value: 'none', text: 'None' },
+                { value: 'low', text: 'Low' },
+                { value: 'medium', text: 'Medium' },
+                { value: 'high', text: 'High' }
+            ]
+        }
+    ];
+
+    characteristics.forEach(char => {
+        const select = document.getElementById(char.id);
+        if (select) {
+            select.innerHTML = '';
+            char.options.forEach(option => {
+                const opt = document.createElement('option');
+                opt.value = option.value;
+                opt.textContent = option.text;
+                select.appendChild(opt);
+            });
+        }
+    });
+}
+
 function initSettings() {
     initMobileSettingsGestures();
+    populateCharacteristicsDropdowns();
 
     document.querySelectorAll('.settings-tab').forEach(tab => {
         tab.addEventListener('click', () => {
@@ -344,6 +405,7 @@ function openSettingsModal() {
     if (isMobile) {
         showSettingsMenu();
     }
+    populateCharacteristicsDropdowns();
     populateAiThemesInDropdown();
     applyVexaSettingsToUI();
     populateDefaultModelSelect();

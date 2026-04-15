@@ -127,20 +127,24 @@ async function renderAiThemes() {
         const isActive = theme.id === activeId;
         const card = document.createElement('div');
         card.dataset.id = theme.id;
-        card.style.cssText = 'display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:var(--radius-lg);background:var(--surface);cursor:pointer;';
+        card.className = 'ai-theme-card';
         card.innerHTML = `
-            <div style="display:flex;gap:5px;flex-shrink:0;">
-                <div style="width:14px;height:14px;border-radius:50%;background:${theme.vars['--bg']};border:1px solid rgba(128,128,128,0.3);"></div>
-                <div style="width:14px;height:14px;border-radius:50%;background:${theme.vars['--fg']};border:1px solid rgba(128,128,128,0.3);"></div>
-                <div style="width:14px;height:14px;border-radius:50%;background:${theme.vars['--accent']};border:1px solid rgba(128,128,128,0.3);"></div>
-            </div>
-            <div style="flex:1;min-width:0;">
-                <div class="ai-theme-name-display" data-id="${theme.id}" style="font-size:0.875rem;font-weight:500;color:var(--fg);cursor:text;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(theme.name)}</div>
-                <div style="font-size:0.7rem;color:var(--muted);margin-top:1px;">${escHtml(theme.prompt)}</div>
-            </div>
-            <button class="ai-theme-apply-btn" data-id="${theme.id}" style="padding:5px 12px;border-radius:var(--radius);background:${isActive ? 'var(--fg)' : 'var(--surface2)'};color:${isActive ? 'var(--bg)' : 'var(--fg)'};font-size:0.75rem;font-weight:600;border:none;cursor:pointer;font-family:var(--font);flex-shrink:0;">${isActive ? 'Active' : 'Apply'}</button>
-            <button class="ai-theme-del-btn" data-id="${theme.id}" style="width:28px;height:28px;border-radius:var(--radius-sm);background:transparent;border:none;color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;"><i class="fa-solid fa-trash"></i></button>
-        `;
+  <div class="ai-theme-colors">
+    <div class="ai-theme-color-dot" style="background:${theme.vars['--bg']}"></div>
+    <div class="ai-theme-color-dot" style="background:${theme.vars['--fg']}"></div>
+    <div class="ai-theme-color-dot" style="background:${theme.vars['--accent']}"></div>
+  </div>
+  <div class="ai-theme-content">
+    <div class="ai-theme-name-display" data-id="${theme.id}">${escHtml(theme.name)}</div>
+    <div class="ai-theme-prompt">${escHtml(theme.prompt)}</div>
+  </div>
+  <button class="ai-theme-apply-btn ${isActive ? 'active' : 'inactive'}" data-id="${theme.id}">
+    ${isActive ? 'Active' : 'Apply'}
+  </button>
+  <button class="ai-theme-del-btn" data-id="${theme.id}">
+    <i class="fa-solid fa-trash"></i>
+  </button>
+`;
 
         card.querySelector('.ai-theme-apply-btn').addEventListener('click', async e => {
             e.stopPropagation();
@@ -192,7 +196,7 @@ async function renderAiThemes() {
             if (!t) return;
             const input = document.createElement('input');
             input.value = t.name;
-            input.style.cssText = 'font-size:0.875rem;font-weight:500;color:var(--fg);background:transparent;border:none;outline:none;border-bottom:1px solid var(--muted);width:100%;font-family:var(--font);';
+            input.className = 'ai-theme-input';
             nameEl.replaceWith(input);
             input.focus();
             input.select();
