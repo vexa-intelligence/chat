@@ -1,3 +1,5 @@
+// this is entirely safe to expose, so all you script kiddies stop nutting in your pants
+
 const CONFIG = {
     BASE: "https://vexa-ai.pages.dev",
     FIREBASE_CONFIG: {
