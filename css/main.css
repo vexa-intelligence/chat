@@ -557,36 +557,42 @@ select {
     max-width: 600px;
 }
 
+.think-block {
+    margin-bottom: 10px;
+    border-radius: 10px;
+    overflow: hidden;
+    background-color: var(--surface);
+}
+
 .think-toggle-btn {
     width: 100%;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 10px 14px;
+    padding: 9px 13px;
     background: none;
     border: none;
     cursor: pointer;
-    font-family: var(--font);
     gap: 10px;
 }
 
 .think-toggle-left {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 7px;
 }
 
 .think-sparkle-icon {
-    width: 14px;
-    height: 14px;
+    width: 13px;
+    height: 13px;
     color: var(--accent);
     flex-shrink: 0;
 }
 
 .think-toggle-label {
-    font-size: 0.8125rem;
-    font-weight: 500;
-    color: var(--fg-muted);
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--accent);
 }
 
 .think-toggle-right {
@@ -597,36 +603,58 @@ select {
 
 .think-show-hide {
     font-size: 0.75rem;
-    color: var(--accent);
-    font-weight: 500;
+    color: var(--muted);
 }
 
 .think-chevron {
-    width: 14px;
-    height: 14px;
-    color: var(--accent);
-    transition: transform 0.25s ease;
-    flex-shrink: 0;
+    width: 13px;
+    height: 13px;
+    color: var(--muted);
+    transition: transform 0.2s ease;
+    transform: rotate(-90deg);
+}
+
+.think-chevron.open {
+    transform: rotate(0deg);
 }
 
 .think-content {
     max-height: 0;
     overflow: hidden;
-    transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: max-height 0.3s ease, padding 0.2s ease;
+    padding: 0 13px;
 }
 
-.think-content.expanded {
-    max-height: 1000px;
+.think-content.open {
+    max-height: 600px;
+    padding: 0 13px 12px;
 }
 
 .think-content-inner {
-    padding: 12px 14px 14px;
-    font-size: 0.8125rem;
-    color: var(--fg-muted);
-    line-height: 1.7;
+    font-size: 0.8rem;
+    color: var(--fg-muted, var(--muted));
+    line-height: 1.6;
     white-space: pre-wrap;
     border-top: 1px solid color-mix(in srgb, var(--accent) 15%, var(--border));
-    font-style: italic;
+    padding-top: 10px;
+}
+
+.attach-dropdown-section-label {
+    font-size: 0.68rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    padding: 6px 12px 2px;
+}
+
+.attach-dropdown-status {
+    font-size: 0.75rem;
+    color: var(--accent);
+    font-weight: 600;
+    padding: 6px 12px 4px;
+    border-bottom: 1px solid var(--border-light);
+    margin-bottom: 4px;
 }
 
 .msg-row {
@@ -749,8 +777,7 @@ select {
 
 .bot-bub a {
     color: var(--accent);
-    text-decoration: underline;
-    text-underline-offset: 2px;
+    text-decoration: none;
 }
 
 .bot-bub a:hover {

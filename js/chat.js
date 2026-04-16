@@ -398,7 +398,7 @@ function cancelEdit() {
     }
 }
 
-function addBubble(role, text, msgIndex) {
+function addBubbleWithThinking(role, text, msgIndex, thinkingContent = null) {
     const feed = document.getElementById('feed');
     const row = document.createElement('div');
     row.className = 'msg-row ' + (role === 'user' ? 'user' : 'bot');
@@ -779,62 +779,66 @@ function buildSystemPrompt() {
 
     const s = getVexaSettings ? getVexaSettings() : {};
 
-    const basePrompt = s.systemPrompt
-        ? s.systemPrompt.trim()
-        : 'You are a helpful, capable assistant. You can browse websites when given URLs, describe and analyze images, generate images on request, and search the web. Never refuse to attempt visiting a URL or viewing an image.';
-
-    if (!prefs && !s.systemPrompt && !s.responseLength && !s.responseLang && !s.memoryEnabled) {
-        return 'You are a helpful, capable assistant. You can browse websites when given URLs, describe and analyze images, generate images on request, search the web, and answer any question. Never say you cannot visit a URL or view an image — always try. Be concise.';
+    if (s.systemPrompt) {
+        return s.systemPrompt.trim();
     }
-    let system = basePrompt;
+
+    const now = new Date();
+    const timeOfDay = now.getHours() < 12 ? 'morning' : now.getHours() < 17 ? 'afternoon' : 'evening';
+    const dateStr = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+
+    let system = `You are Vexa, a sharp, witty, deeply personal AI. Today is ${dateStr} (${timeOfDay}). You remember everything said in this conversation and reference it naturally. You never repeat yourself, never give generic filler answers. You are direct, insightful, and adapt your tone to the user. When you don't know something, say so plainly. Never start replies with "Of course!", "Certainly!", "Great question!", or sycophantic openers.`;
+
+    const toneMap = {
+        balanced: 'Be clear and human — not robotic, not overly formal.',
+        professional: 'Use professional, precise language. Stay concise.',
+        casual: 'Be casual and conversational, like a knowledgeable friend.',
+        concise: 'Be extremely concise. One or two sentences max unless more is truly needed.',
+        detailed: 'Give thorough, well-structured responses with context and examples.'
+    };
 
     if (prefs) {
-        const toneMap = {
-            balanced: 'Be clear and concise.',
-            formal: 'Use formal, professional language.',
-            casual: 'Use casual, friendly language.',
-            technical: 'Use precise, technical language.'
-        };
-        if (!s.systemPrompt) {
-            system += ' ' + (toneMap[prefs.baseTone] || toneMap.balanced);
-        }
+        const tone = toneMap[prefs.baseTone] || toneMap.balanced;
+        system += ' ' + tone;
 
-        if (prefs.nickname) system += ` Address the user as "${prefs.nickname}".`;
-        if (prefs.aboutUser) system += ` About the user: ${prefs.aboutUser}.`;
-        if (prefs.customInstructions) system += ` Additional instructions: ${prefs.customInstructions}.`;
+        if (prefs.nickname) system += ` Call the user "${prefs.nickname}" occasionally (not every message).`;
+        if (prefs.aboutUser) system += ` Context about who you're talking to: ${prefs.aboutUser}.`;
+        if (prefs.customInstructions) system += ` User's custom instructions (follow these): ${prefs.customInstructions}.`;
 
         const charMap = {
-            charWarm: { more: 'Be warm and empathetic.', less: 'Be neutral and direct.' },
-            charEnthusiastic: { more: 'Show enthusiasm and energy.', less: 'Be calm and reserved.' },
-            charHeaders: { more: 'Use headers to organize long responses.', less: 'Avoid headers, use prose instead.' },
-            charEmoji: { more: 'Use emojis occasionally to add personality.', less: 'Never use emojis.' },
-            charHumor: { more: 'Include light humor when appropriate.', less: 'Keep responses serious.' }
+            charWarm: { more: 'Be warm, empathetic, and emotionally intelligent.', less: 'Stay neutral and purely factual.' },
+            charEnthusiastic: { more: 'Show genuine enthusiasm when the topic warrants it.', less: 'Stay calm and measured.' },
+            charHeaders: { more: 'Use headers to organize longer responses.', less: 'Write in flowing prose, never headers.' },
+            charEmoji: { more: 'Use emojis sparingly but naturally.', less: 'Never use emojis.' },
+            charHumor: { more: 'Weave in light, smart humor when appropriate.', less: 'Keep all responses serious.' }
         };
 
         Object.entries(charMap).forEach(([key, vals]) => {
             if (prefs[key] === 'more') system += ' ' + vals.more;
             else if (prefs[key] === 'less') system += ' ' + vals.less;
         });
+    } else {
+        system += ' ' + toneMap.balanced;
     }
 
     if (s.responseLength) {
         const lenMap = {
-            short: 'Keep all responses brief and to the point — avoid unnecessary elaboration.',
+            short: 'Keep all responses brief — cut anything that isn\'t essential.',
             balanced: '',
-            detailed: 'Give thorough, detailed responses with examples and explanation where helpful.'
+            detailed: 'Give full, detailed responses. Include examples, nuance, and context.'
         };
         if (lenMap[s.responseLength]) system += ' ' + lenMap[s.responseLength];
     }
 
     if (s.responseLang && s.responseLang !== 'auto') {
-        system += ` Always respond in ${s.responseLang}.`;
+        system += ` Always respond in ${s.responseLang}, regardless of the language the user writes in.`;
     }
 
     if (s.memoryEnabled) {
         try {
             const memories = JSON.parse(localStorage.getItem('vexa_memory') || '[]');
             if (memories.length) {
-                system += ` Known facts about the user: ${memories.join('; ')}.`;
+                system += ` Remembered facts about this user (use naturally, don't list them): ${memories.join('; ')}.`;
             }
         } catch { }
     }
@@ -847,25 +851,20 @@ function buildConversationHistory(session) {
 
     let messages = session.messages
         .filter(m => m.role === 'user' || m.role === 'assistant')
-        .filter(m => {
-            if (typeof m.content === 'string') return true;
-            if (typeof m.content === 'object' && m.content.type === 'image') return false;
-            return typeof m.content === 'string';
-        })
-        .map(m => ({ role: m.role, content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content) }));
+        .filter(m => typeof m.content === 'string' || (typeof m.content === 'object' && m.content?.type !== 'image'))
+        .map(m => ({ role: m.role, content: typeof m.content === 'string' ? m.content : '' }))
+        .filter(m => m.content.length > 0);
 
-    const systemMessage = { role: 'system', content: buildSystemPrompt() };
-    const maxChars = 14000;
-
+    const systemContent = buildSystemPrompt();
+    const maxChars = 28000;
     let historyMessages = [];
-    let totalChars = systemMessage.content.length;
+    let totalChars = systemContent.length;
 
-    for (let i = messages.length - 1; i >= 0 && historyMessages.length < 8; i--) {
-        const messageChars = JSON.stringify(messages[i]).length + 10;
-        if (totalChars + messageChars > maxChars) break;
-
+    for (let i = messages.length - 1; i >= 0 && historyMessages.length < 20; i--) {
+        const msgChars = messages[i].content.length + 20;
+        if (totalChars + msgChars > maxChars) break;
         historyMessages.unshift(messages[i]);
-        totalChars += messageChars;
+        totalChars += msgChars;
     }
 
     return historyMessages;
@@ -1126,7 +1125,7 @@ async function sendText(text) {
     }
 
     session.messages.push({ role: 'user', content: text });
-    addBubble('user', text);
+    addBubbleWithThinking('user', text);
     const loading = addLoading();
 
     let aiReply = null;
@@ -1159,9 +1158,22 @@ async function sendText(text) {
     }
 
     if (aiReply) {
-        session.messages.push({ role: 'assistant', content: aiReply });
+        const replyContent = typeof aiReply === 'object' ? aiReply : aiReply;
+        if (typeof replyContent === 'object' && replyContent.type === 'image') {
+            session.messages.push({ role: 'assistant', content: replyContent });
+        } else if (typeof replyContent === 'object' && replyContent.thinking) {
+            session.messages.push({
+                role: 'assistant',
+                content: replyContent.content,
+                thinking: replyContent.thinking
+            });
+        } else {
+            session.messages.push({ role: 'assistant', content: replyContent });
+        }
+
         if (session.messages.filter(m => m.role === 'user').length === 1) {
-            const aiTitle = await generateChatTitle(text, typeof aiReply === 'string' ? aiReply : '');
+            const replyText = typeof aiReply === 'string' ? aiReply : (aiReply && aiReply.content) ? aiReply.content : '';
+            const aiTitle = await generateChatTitle(text, replyText);
             if (aiTitle) {
                 session.title = aiTitle;
                 renderChatHistory();
@@ -1198,7 +1210,7 @@ async function sendImagePrompt(prompt) {
     }
 
     session.messages.push({ role: 'user', content: prompt });
-    addBubble('user', prompt);
+    addBubbleWithThinking('user', prompt);
     const loading = addLoading();
 
     let aiReply = null;
@@ -1220,7 +1232,8 @@ async function sendImagePrompt(prompt) {
             session.messages.push({ role: 'assistant', content: replyContent });
         }
         if (session.messages.filter(m => m.role === 'user').length === 1) {
-            const aiTitle = await generateChatTitle(prompt, typeof aiReply === 'string' ? aiReply : '');
+            const replyText = typeof aiReply === 'string' ? aiReply : (aiReply && aiReply.content) ? aiReply.content : '';
+            const aiTitle = await generateChatTitle(prompt, replyText);
             if (aiTitle) {
                 session.title = aiTitle;
                 renderChatHistory();
@@ -1280,7 +1293,7 @@ async function loadSessionIntoChat(session) {
             }
 
             if (content && typeof content === 'object' && content.type === 'image') {
-                const row = addBubble(msg.role === 'user' ? 'user' : 'bot', '', msg.role === 'user' ? index : undefined);
+                const row = addBubbleWithThinking(msg.role === 'user' ? 'user' : 'bot', '', msg.role === 'user' ? index : undefined);
                 if (msg.role === 'assistant') {
                     const imageUrl = content.dataUrl || content.url;
                     if (imageUrl) {
@@ -1288,7 +1301,12 @@ async function loadSessionIntoChat(session) {
                     }
                 }
             } else {
-                addBubble(msg.role === 'user' ? 'user' : 'bot', content, msg.role === 'user' ? index : undefined);
+                let displayContent = content;
+                if (typeof displayContent === 'object' && displayContent !== null) {
+                    displayContent = displayContent.content || String(displayContent);
+                }
+
+                addBubbleWithThinking(msg.role === 'user' ? 'user' : 'bot', displayContent, msg.role === 'user' ? index : undefined, msg.role === 'assistant' ? (msg.thinking || null) : null);
             }
         });
         renderChatHistory();
@@ -1599,3 +1617,131 @@ function openSearchModal() {
     input.focus();
     resetSearchResults();
 }
+
+function addBubbleWithThinking(role, text, msgIndex, thinkingContent = null) {
+    const feed = document.getElementById('feed');
+    const row = document.createElement('div');
+    row.className = 'msg-row ' + (role === 'user' ? 'user' : 'bot');
+
+    const s = getVexaSettings ? getVexaSettings() : {};
+    const showTs = !!s.showTimestamps;
+    const tsHtml = showTs
+        ? `<div class="msg-timestamp">${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>`
+        : '';
+
+    if (role === 'user') {
+        const bub = document.createElement('div');
+        bub.className = 'user-bub';
+        bub.innerHTML = escHtml(text).replace(/\n/g, '<br>');
+        if (showTs) {
+            const tsEl = document.createElement('div');
+            tsEl.className = 'msg-timestamp';
+            tsEl.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            bub.appendChild(tsEl);
+        }
+        row.appendChild(bub);
+
+        if (msgIndex !== undefined) {
+            let pressTimer;
+            bub.addEventListener('contextmenu', e => {
+                e.preventDefault();
+                openMsgContextMenu(e, msgIndex);
+            });
+            bub.addEventListener('touchstart', e => {
+                pressTimer = setTimeout(() => openMsgContextMenu(e.touches[0], msgIndex), 500);
+            }, { passive: true });
+            bub.addEventListener('touchend', () => clearTimeout(pressTimer));
+            bub.addEventListener('touchmove', () => clearTimeout(pressTimer));
+            bub.addEventListener('dblclick', e => openMsgContextMenu(e, msgIndex));
+        }
+    } else {
+        const bub = document.createElement('div');
+        bub.className = 'bot-bub';
+
+        if (thinkingContent) {
+            const thinkBlock = document.createElement('div');
+            thinkBlock.className = 'think-block';
+            thinkBlock.innerHTML = `
+                <button class="think-toggle-btn">
+                    <div class="think-toggle-left">
+                        <svg viewBox="0 0 24 24" fill="currentColor" class="think-sparkle-icon"><path d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5L12 2Z"/></svg>
+                        <span class="think-toggle-label">Thought for a moment</span>
+                    </div>
+                    <div class="think-toggle-right">
+                        <span class="think-show-hide">Hide thinking</span>
+                        <svg class="think-chevron open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                    </div>
+                </button>
+                <div class="think-content open">
+                    <div class="think-content-inner">${escHtml(thinkingContent)}</div>
+                </div>`;
+
+            let open = true;
+            const btn = thinkBlock.querySelector('.think-toggle-btn');
+            const content = thinkBlock.querySelector('.think-content');
+            const label = thinkBlock.querySelector('.think-show-hide');
+            const chevron = thinkBlock.querySelector('.think-chevron');
+            btn.addEventListener('click', () => {
+                open = !open;
+                content.classList.toggle('open', open);
+                chevron.classList.toggle('open', open);
+                label.textContent = open ? 'Hide thinking' : 'Show thinking';
+            });
+
+            bub.appendChild(thinkBlock);
+        }
+
+        const rendered = fmt(text);
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'bot-bub-content';
+        contentDiv.innerHTML = rendered;
+        bub.appendChild(contentDiv);
+
+        const actionsDiv = document.createElement('div');
+        actionsDiv.className = 'msg-actions';
+        actionsDiv.innerHTML = '<button class="copy-text-btn" title="Copy message"><i class="fa-regular fa-copy"></i> Copy</button>';
+        bub.appendChild(actionsDiv);
+
+        if (showTs) {
+            const tsEl = document.createElement('div');
+            tsEl.className = 'msg-timestamp';
+            tsEl.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            bub.appendChild(tsEl);
+        }
+        row.appendChild(bub);
+
+        let rawText = text;
+        attachCopyText(row, () => rawText);
+        attachCodeCopyListeners(row);
+    }
+
+    feed.appendChild(row);
+}
+
+function loadSessionIntoChatWithThinking(session) {
+    currentSessionId = session.id;
+    const feed = document.getElementById('feed');
+    const feedEmpty = document.getElementById('feedEmpty');
+    feed.innerHTML = '';
+    if (feedEmpty) feedEmpty.remove();
+
+    session.messages.forEach((msg, index) => {
+        let content = msg.content;
+        if (typeof content === 'object' && content !== null) {
+            content = content.content || String(content);
+        }
+
+        if (msg.role === 'user') {
+            addBubbleWithThinking('user', content, index);
+        } else if (msg.role === 'assistant') {
+            addBubbleWithThinking('bot', content, index, msg.thinking || null);
+        }
+    });
+
+    renderChatHistory();
+    document.querySelector('.chat-wrap')?.classList.remove('empty-chat');
+    scrollBottom();
+}
+
+window.originalLoadSessionIntoChat = window.loadSessionIntoChat;
+window.loadSessionIntoChat = loadSessionIntoChatWithThinking;

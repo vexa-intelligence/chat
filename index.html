@@ -144,15 +144,9 @@
                                         <i class="fa-solid fa-plus" style="font-size:15px"></i>
                                     </button>
                                     <div class="attach-dropdown" id="attachDropdown">
-                                        <div class="attach-dropdown-item" onclick="triggerImageUpload()"
-                                            title="Upload image for AI to analyze">
-                                            <i class="fa-solid fa-image"></i>
-                                            <span>
-                                                <div class="main-text">Upload image</div>
-                                                <div class="sub-text">Ask AI about your image</div>
-                                            </span>
-                                            <i class="fa-solid fa-check mode-check"></i>
+                                        <div class="attach-dropdown-status" id="attachModeStatus" style="display:none">
                                         </div>
+                                        <div class="attach-dropdown-section-label">Modes</div>
                                         <div class="attach-dropdown-item" data-action="thinking"
                                             onclick="toggleThinkingMode()">
                                             <i class="fa-solid fa-lightbulb"></i>
@@ -162,7 +156,6 @@
                                             </span>
                                             <i class="fa-solid fa-check mode-check"></i>
                                         </div>
-                                        <div class="attach-dropdown-divider"></div>
                                         <div class="attach-dropdown-item" data-action="search"
                                             onclick="toggleWebSearch()">
                                             <i class="fa-solid fa-compass"></i>
@@ -178,6 +171,16 @@
                                             <span>
                                                 <div class="main-text">Deep research</div>
                                                 <div class="sub-text">Multi-source in-depth analysis</div>
+                                            </span>
+                                            <i class="fa-solid fa-check mode-check"></i>
+                                        </div>
+                                        <div class="attach-dropdown-divider"></div>
+                                        <div class="attach-dropdown-section-label">Attach</div>
+                                        <div class="attach-dropdown-item" onclick="triggerImageUpload()">
+                                            <i class="fa-solid fa-image"></i>
+                                            <span>
+                                                <div class="main-text">Upload image</div>
+                                                <div class="sub-text">Ask AI about your image</div>
                                             </span>
                                             <i class="fa-solid fa-check mode-check"></i>
                                         </div>

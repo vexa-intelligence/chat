@@ -24,6 +24,7 @@ function isDeepResearch() { return deepResearchEnabled; }
 
 function toggleThinkingMode() {
     thinkingModeEnabled = !thinkingModeEnabled;
+    console.log('DEBUG: Thinking mode toggled to:', thinkingModeEnabled);
     if (thinkingModeEnabled) deepResearchEnabled = false;
     setVexaSetting('thinkingMode', thinkingModeEnabled);
     setVexaSetting('deepResearch', false);
@@ -33,6 +34,7 @@ function toggleThinkingMode() {
 
 function toggleDeepResearch() {
     deepResearchEnabled = !deepResearchEnabled;
+    console.log('DEBUG: Deep research mode toggled to:', deepResearchEnabled);
     if (deepResearchEnabled) thinkingModeEnabled = false;
     setVexaSetting('deepResearch', deepResearchEnabled);
     setVexaSetting('thinkingMode', false);
@@ -41,8 +43,15 @@ function toggleDeepResearch() {
 }
 
 function toggleWebSearch() {
-    if (typeof toggleSearchMode === 'function') toggleSearchMode();
-    if (typeof isSearchMode === 'function') setVexaSetting('searchMode', isSearchMode());
+    if (typeof toggleSearchMode === 'function') {
+        console.log('DEBUG: Web search toggle requested');
+        toggleSearchMode();
+    }
+    if (typeof isSearchMode === 'function') {
+        const newState = isSearchMode();
+        console.log('DEBUG: Web search mode after toggle:', newState);
+        setVexaSetting('searchMode', newState);
+    }
     updateAttachBtnIcon();
     updateDropdownActiveStates();
 }
@@ -66,15 +75,27 @@ function toggleAttachDropdown() {
 
     if (attachDropdownOpen) {
         updateDropdownActiveStates();
+        updateModeLabels();
         dropdown.classList.add('show');
         attachBtn.classList.add('active');
-        setTimeout(() => {
-            document.addEventListener('click', closeAttachDropdownOutside);
-        }, 100);
+        setTimeout(() => document.addEventListener('click', closeAttachDropdownOutside), 100);
     } else {
         dropdown.classList.remove('show');
         attachBtn.classList.remove('active');
         document.removeEventListener('click', closeAttachDropdownOutside);
+    }
+}
+
+function updateModeLabels() {
+    const activeMode = thinkingModeEnabled ? 'thinking' : deepResearchEnabled ? 'research' : (isSearchMode && isSearchMode()) ? 'search' : null;
+    const statusEl = document.getElementById('attachModeStatus');
+    if (!statusEl) return;
+    const labels = { thinking: 'Thinking on', research: 'Deep Research on', search: 'Web Search on' };
+    if (activeMode) {
+        statusEl.textContent = labels[activeMode];
+        statusEl.style.display = 'block';
+    } else {
+        statusEl.style.display = 'none';
     }
 }
 
@@ -219,15 +240,25 @@ function injectAttachButton() {
 document.addEventListener('DOMContentLoaded', () => {
     function restoreAttachModes() {
         const s = typeof getVexaSettings === 'function' ? getVexaSettings() : {};
+        console.log('DEBUG: Restoring modes from settings:', s);
         thinkingModeEnabled = !!s.thinkingMode;
         deepResearchEnabled = !!s.deepResearch;
-        if (s.searchMode && typeof toggleSearchMode === 'function' && typeof isSearchMode === 'function' && !isSearchMode()) {
-            toggleSearchMode();
+
+        if (typeof toggleSearchMode === 'function' && typeof isSearchMode === 'function') {
+            const currentSearchMode = isSearchMode();
+            const savedSearchMode = s.searchMode;
+            console.log('DEBUG: Search mode - Saved:', savedSearchMode, 'Current:', currentSearchMode);
+
+            if (savedSearchMode !== currentSearchMode) {
+                console.log('DEBUG: Toggling search mode to match saved setting');
+                toggleSearchMode();
+            }
         }
         updateAttachBtnIcon();
         updateDropdownActiveStates();
+        console.log('DEBUG: Final modes - Thinking:', thinkingModeEnabled, 'Research:', deepResearchEnabled, 'Search:', typeof isSearchMode === 'function' ? isSearchMode() : 'unknown');
     }
-    
+
     injectAttachButton();
     restoreAttachModes();
 

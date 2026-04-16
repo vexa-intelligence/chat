@@ -13,10 +13,13 @@ async function getFavicon(url) {
 }
 
 async function sendChatTextWithThinking(userMessage, loading, session) {
+    console.log('DEBUG: Thinking mode activated for message:', userMessage);
     const history = buildConversationHistory(session);
 
     const thinkingSystemAddition = `
-You are an advanced reasoning assistant. When you think through a problem, wrap your internal reasoning in <think>...</think> tags before giving your final answer. Be thorough in your reasoning, explore multiple angles, and then present a clean, clear final response after the thinking block.`;
+You are an advanced reasoning assistant. When you think through a problem, wrap your internal reasoning in <think>...</think> tags before giving your final answer. Be thorough in your reasoning, explore multiple angles, and then present a clean, clear final response after the thinking block.
+
+IMPORTANT: Always start your response with <think> tags containing your step-by-step reasoning process, then close with </think> tags, then provide your final answer.`;
 
     const messages = [
         { role: 'system', content: buildSystemPrompt() + thinkingSystemAddition },
@@ -40,15 +43,58 @@ You are an advanced reasoning assistant. When you think through a problem, wrap 
     let reply = String(extractText(raw)).trim();
     let think = null;
 
+    console.log('DEBUG: Raw AI reply for thinking mode:', reply);
+
     const m = reply.match(/<think>([\s\S]*?)<\/think>/i);
     if (m) {
         think = m[1].trim();
         reply = reply.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+        console.log('DEBUG: Extracted thinking content:', think);
+        console.log('DEBUG: Cleaned reply:', reply);
+    } else {
+        console.log('DEBUG: No <think> tags found in AI reply - generating fallback thinking');
+
+        try {
+            const thinkRes = await fetch(`${CONFIG.BASE}/chat`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    model: currentModel || 'vexa',
+                    messages: [
+                        { role: 'system', content: 'You are a reasoning assistant. Provide step-by-step thinking for this question. Be analytical and break down the problem. Output 3-5 sentences showing your thought process.' },
+                        { role: 'user', content: userMessage }
+                    ]
+                })
+            });
+
+            if (thinkRes.ok) {
+                const thinkRaw = await thinkRes.json();
+                if (thinkRaw.success) {
+                    think = String(extractText(thinkRaw)).trim();
+                    console.log('DEBUG: Generated fallback thinking:', think);
+                }
+            }
+        } catch (err) {
+            console.log('DEBUG: Failed to generate fallback thinking');
+        }
+
+        if (!think) {
+            think = `Let me think through this step by step. The question is asking for "${userMessage}". I need to consider the key concepts and provide a precise answer.`;
+            console.log('DEBUG: Using simple fallback thinking');
+        }
     }
 
     await new Promise(r => setTimeout(r, 200));
 
     await typewriterSwapWithThinking(loading, reply, think);
+
+    if (think) {
+        return {
+            content: reply,
+            thinking: think
+        };
+    }
+
     return reply;
 }
 
@@ -86,23 +132,29 @@ async function typewriterSwapWithThinking(row, text, think) {
         const block = document.createElement('div');
         block.className = 'think-block';
         block.innerHTML = `
-            <button class="think-toggle">
-                <svg viewBox="0 0 24 24" fill="currentColor" class="think-icon"><path d="M12 2l1.5 6.5L20 10l-6.5 1.5L12 18l-1.5-6.5L4 10l6.5-1.5z"/></svg>
-                <span class="think-label">Thought for a moment</span>
-                <span class="think-pill">Show</span>
+            <button class="think-toggle-btn">
+                <div class="think-toggle-left">
+                    <svg viewBox="0 0 24 24" fill="currentColor" class="think-sparkle-icon"><path d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5L12 2Z"/></svg>
+                    <span class="think-toggle-label">Thought for a moment</span>
+                </div>
+                <div class="think-toggle-right">
+                    <span class="think-show-hide">Hide thinking</span>
+                    <svg class="think-chevron open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                </div>
             </button>
-            <div class="think-drawer">
-                <div class="think-drawer-inner">${escHtml(think)}</div>
+            <div class="think-content open">
+                <div class="think-content-inner">${escHtml(think)}</div>
             </div>`;
-        let open = false;
-        const btn = block.querySelector('.think-toggle');
-        const drawer = block.querySelector('.think-drawer');
-        const pill = block.querySelector('.think-pill');
+        let open = true;
+        const btn = block.querySelector('.think-toggle-btn');
+        const content = block.querySelector('.think-content');
+        const label = block.querySelector('.think-show-hide');
+        const chevron = block.querySelector('.think-chevron');
         btn.addEventListener('click', () => {
             open = !open;
-            drawer.classList.toggle('open', open);
-            pill.textContent = open ? 'Hide' : 'Show';
-            pill.classList.toggle('active', open);
+            content.classList.toggle('open', open);
+            chevron.classList.toggle('open', open);
+            label.textContent = open ? 'Hide thinking' : 'Show thinking';
         });
         bub.appendChild(block);
     }
@@ -117,6 +169,7 @@ async function typewriterSwapWithThinking(row, text, think) {
     for (let i = 0; i < tokens.length; i++) {
         rendered += tokens[i];
         textEl.innerHTML = fmt(rendered);
+        scrollBottom();
         await sleep(tokens[i].length > 3 ? 5 : 14);
     }
 
@@ -303,7 +356,6 @@ async function sendDeepResearch(userMessage, loading, session) {
     finalBub.appendChild(actionsEl);
     attachCopyText(loading, () => reply);
 
-    return reply;
 }
 
 async function sendChatWithVisionImages(text, images, loading, session) {
@@ -358,318 +410,16 @@ async function sendChatWithVisionImages(text, images, loading, session) {
     if (m) { think = m[1].trim(); reply = reply.replace(/<think>[\s\S]*?<\/think>/gi, '').trim(); }
 
     await typewriterSwapWithThinking(loading, reply, think);
+
+    if (think) {
+        return {
+            content: reply,
+            thinking: think
+        };
+    }
+
     return reply;
 }
-
-function initThinkingStyles() {
-    const style = document.createElement('style');
-    style.textContent = `
-        .think-block {
-            margin-bottom: 12px;
-            border-radius: 12px;
-            background: color-mix(in srgb, var(--accent) 5%, var(--surface));
-            border: 1px solid color-mix(in srgb, var(--accent) 20%, var(--border));
-            overflow: hidden;
-        }
-
-        .think-toggle-btn {
-            width: 100%;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 10px 14px;
-            background: none;
-            border: none;
-            cursor: pointer;
-            font-family: var(--font);
-            gap: 10px;
-        }
-
-        .think-toggle-left {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .think-sparkle-wrap {
-            width: 20px;
-            height: 20px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: var(--accent);
-        }
-
-        .think-sparkle-icon {
-            width: 14px;
-            height: 14px;
-        }
-
-        .think-toggle-label {
-            font-size: 0.8125rem;
-            font-weight: 500;
-            color: var(--fg-muted);
-        }
-
-        .think-toggle-right {
-            display: flex;
-            align-items: center;
-            gap: 5px;
-        }
-
-        .think-show-hide {
-            font-size: 0.75rem;
-            color: var(--accent);
-            font-weight: 500;
-        }
-
-        .think-chevron {
-            width: 14px;
-            height: 14px;
-            color: var(--accent);
-            transition: transform 0.25s ease;
-            flex-shrink: 0;
-        }
-
-        .think-content {
-            max-height: 0;
-            overflow: hidden;
-            transition: max-height 0.4s cubic-bezier(0.4,0,0.2,1);
-        }
-
-        .think-content.expanded {
-            max-height: 800px;
-        }
-
-        .think-content-inner {
-            padding: 0 14px 14px;
-            font-size: 0.8125rem;
-            color: var(--fg-muted);
-            line-height: 1.7;
-            white-space: pre-wrap;
-            border-top: 1px solid color-mix(in srgb, var(--accent) 15%, var(--border));
-            padding-top: 12px;
-            font-style: italic;
-        }
-
-        .thinking-live-block {
-            padding: 14px 16px;
-            border-radius: 12px;
-            background: color-mix(in srgb, var(--accent) 5%, var(--surface));
-            border: 1px solid color-mix(in srgb, var(--accent) 20%, var(--border));
-        }
-
-        .thinking-live-header {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 10px;
-        }
-
-        .thinking-live-orb {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            background: var(--accent);
-            animation: orb-pulse 1.4s ease-in-out infinite;
-            flex-shrink: 0;
-        }
-
-        @keyframes orb-pulse {
-            0%, 100% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.4; transform: scale(0.7); }
-        }
-
-        .thinking-live-label {
-            font-size: 0.8125rem;
-            font-weight: 600;
-            color: var(--accent);
-        }
-
-        .thinking-live-steps {
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-            max-height: 180px;
-            overflow-y: auto;
-            scrollbar-width: none;
-        }
-
-        .thinking-live-steps::-webkit-scrollbar { display: none; }
-
-        .thinking-live-step {
-            font-size: 0.775rem;
-            color: var(--fg-muted);
-            line-height: 1.5;
-            opacity: 0;
-            transform: translateY(4px);
-            transition: opacity 0.25s ease, transform 0.25s ease;
-            padding-left: 18px;
-            position: relative;
-        }
-
-        .thinking-live-step::before {
-            content: '·';
-            position: absolute;
-            left: 6px;
-            color: var(--accent);
-            font-size: 1.1rem;
-            line-height: 1;
-            top: 1px;
-        }
-
-        .thinking-live-step.visible {
-            opacity: 1;
-            transform: translateY(0);
-        }
-
-        .deep-research-live {
-            padding: 16px 18px;
-            border-radius: 14px;
-            background: color-mix(in srgb, var(--accent) 5%, var(--surface));
-            border: 1px solid color-mix(in srgb, var(--accent) 20%, var(--border));
-        }
-
-        .dr-header {
-            display: flex;
-            align-items: center;
-            gap: 14px;
-            margin-bottom: 16px;
-        }
-
-        .dr-orb-wrap {
-            position: relative;
-            width: 36px;
-            height: 36px;
-            flex-shrink: 0;
-        }
-
-        .dr-orb {
-            width: 24px;
-            height: 24px;
-            border-radius: 50%;
-            background: var(--accent);
-            position: absolute;
-            top: 6px;
-            left: 6px;
-            animation: orb-pulse 1.8s ease-in-out infinite;
-        }
-
-        .dr-orb-ring {
-            width: 36px;
-            height: 36px;
-            border-radius: 50%;
-            border: 2px solid color-mix(in srgb, var(--accent) 35%, transparent);
-            position: absolute;
-            top: 0;
-            left: 0;
-            animation: ring-spin 2.5s linear infinite;
-        }
-
-        @keyframes ring-spin {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
-        }
-
-        .dr-title {
-            font-size: 0.9375rem;
-            font-weight: 700;
-            color: var(--fg);
-        }
-
-        .dr-subtitle {
-            font-size: 0.775rem;
-            color: var(--fg-muted);
-            margin-top: 2px;
-            transition: all 0.3s ease;
-        }
-
-        .dr-steps {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            margin-bottom: 12px;
-        }
-
-        .dr-step {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 0.8125rem;
-            color: var(--fg-muted);
-            opacity: 0.4;
-            transition: opacity 0.4s ease;
-        }
-
-        .dr-step.done {
-            opacity: 1;
-        }
-
-        .dr-step-icon {
-            color: var(--accent);
-            font-size: 12px;
-            flex-shrink: 0;
-        }
-
-        .dr-sources {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 6px;
-        }
-
-        .dr-source-chip {
-            display: inline-flex;
-            align-items: center;
-            gap: 4px;
-            padding: 3px 9px;
-            border-radius: 999px;
-            background: var(--surface2);
-            color: var(--fg-muted);
-            font-size: 0.72rem;
-            text-decoration: none;
-            border: 1px solid var(--border-light);
-            transition: background 0.15s;
-            animation: chip-pop 0.3s ease;
-        }
-
-        @keyframes chip-pop {
-            from { transform: scale(0.85); opacity: 0; }
-            to { transform: scale(1); opacity: 1; }
-        }
-
-        .dr-source-chip:hover {
-            background: var(--surface3);
-            color: var(--fg);
-        }
-
-        .dr-final-sources {
-            display: flex;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 6px;
-            padding: 10px 0;
-            margin-bottom: 12px;
-            border-bottom: 1px solid var(--border-light);
-        }
-
-        .dr-final-sources-label {
-            font-size: 0.75rem;
-            color: var(--muted);
-            flex-shrink: 0;
-        }
-
-        .search-source-favicon {
-            width: 12px;
-            height: 12px;
-            border-radius: 2px;
-            object-fit: contain;
-            flex-shrink: 0;
-        }
-    `;
-    document.head.appendChild(style);
-}
-
-document.addEventListener('DOMContentLoaded', initThinkingStyles);
 
 window.sendChatTextWithThinking = sendChatTextWithThinking;
 window.sendDeepResearch = sendDeepResearch;

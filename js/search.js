@@ -102,7 +102,7 @@ function buildSearchContext(query, data) {
     if (data.infobox && data.infobox.content) {
         ctx += 'Info: ' + data.infobox.content.slice(0, 400) + '\n\n';
     }
-    ctx += "Use the search results above to answer the user's question. Cite sources by referencing their title and URL inline where relevant.";
+    ctx += "Use the search results above to answer the user's question. Do NOT output any HTML. Do not include source links or citations in your response.";
     return ctx;
 }
 
@@ -308,9 +308,8 @@ async function sendChatTextWithSearch(userMessage, loading, session) {
 
     if (visitContext) {
         const history = buildConversationHistory(session);
-        const systemContent = buildSystemPrompt();
         const messages = [
-            { role: 'system', content: systemContent },
+            { role: 'system', content: buildSystemPrompt() },
             ...history,
             { role: 'user', content: visitContext + '\n\nUser question: ' + userMessage }
         ];
@@ -321,11 +320,7 @@ async function sendChatTextWithSearch(userMessage, loading, session) {
             body: JSON.stringify({ model: currentModel || 'vexa', messages })
         });
 
-        if (!res.ok) {
-            const errorText = await res.text();
-            throw new Error('HTTP ' + res.status + ': ' + errorText);
-        }
-
+        if (!res.ok) throw new Error('HTTP ' + res.status + ': ' + await res.text());
         const raw = await res.json();
         if (!raw.success) throw new Error(raw.error || 'API returned success: false');
 
@@ -349,11 +344,42 @@ async function sendChatTextWithSearch(userMessage, loading, session) {
     let searchResults = [];
 
     try {
-        const data = await cyronSearch(userMessage);
+        let searchQuery = userMessage;
+        const lastUserMessage = session.messages[session.messages.length - 2]?.content || '';
+        const researchPatterns = [
+            /^(research|search|look up|find|google|dig into)\s+(it|that|this|more|deeper)/i,
+            /^(tell me more|explain more|what about|research|search)$/i,
+            /\b(research it|search it|find more|look up more)\b/i
+        ];
+
+        if (researchPatterns.some(p => p.test(userMessage)) && lastUserMessage) {
+            try {
+                const queryRes = await fetch(CONFIG.BASE + '/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        model: currentModel || 'vexa',
+                        messages: [
+                            { role: 'system', content: 'Generate a concise search query (3-8 words) based on the user\'s topic. Only output the search query, nothing else.' },
+                            { role: 'user', content: 'Topic: ' + lastUserMessage.slice(0, 200) }
+                        ]
+                    })
+                });
+                if (queryRes.ok) {
+                    const queryData = await queryRes.json();
+                    if (queryData.success) {
+                        const generated = String(extractText(queryData)).trim().replace(/^["']|["']$/g, '');
+                        if (generated && generated.length > 2) searchQuery = generated;
+                    }
+                }
+            } catch { }
+        }
+
+        const data = await cyronSearch(searchQuery);
         searchResults = (data && data.results && data.results.all) ? data.results.all.slice(0, 5) : [];
-        searchContext = buildSearchContext(userMessage, data);
+        searchContext = buildSearchContext(searchQuery, data);
         updateSearchStatus('Search complete');
-    } catch (err) {
+    } catch {
         updateSearchStatus('Search failed, using AI knowledge\u2026');
     }
 
@@ -361,17 +387,10 @@ async function sendChatTextWithSearch(userMessage, loading, session) {
     removeSearchStatusBubble();
 
     const history = buildConversationHistory(session);
-    const systemContent = buildSystemPrompt();
-
     const messages = [
-        { role: 'system', content: systemContent },
+        { role: 'system', content: buildSystemPrompt() },
         ...history,
-        {
-            role: 'user',
-            content: searchContext
-                ? searchContext + '\n\nUser question: ' + userMessage
-                : userMessage
-        }
+        { role: 'user', content: searchContext ? searchContext + '\n\nUser question: ' + userMessage : userMessage }
     ];
 
     const res = await fetch(CONFIG.BASE + '/chat', {
@@ -380,52 +399,51 @@ async function sendChatTextWithSearch(userMessage, loading, session) {
         body: JSON.stringify({ model: currentModel || 'vexa', messages })
     });
 
-    if (!res.ok) {
-        const errorText = await res.text();
-        throw new Error('HTTP ' + res.status + ': ' + errorText);
-    }
-
+    if (!res.ok) throw new Error('HTTP ' + res.status + ': ' + await res.text());
     const raw = await res.json();
-
-    if (!raw.success) {
-        throw new Error(raw.error || 'API returned success: false');
-    }
+    if (!raw.success) throw new Error(raw.error || 'API returned success: false');
 
     let reply = String(extractText(raw)).trim();
     let think = null;
     const m = reply.match(/<think>([\s\S]*?)<\/think>/i);
     if (m) { think = m[1].trim(); reply = reply.replace(/<think>[\s\S]*?<\/think>/gi, '').trim(); }
 
+    await typewriterSwap(loading, reply, think);
+
     if (searchResults.length) {
-        const sourcesWithFavicons = await Promise.all(
-            searchResults.slice(0, 4).map(async r => {
-                let domain = '';
-                try { domain = new URL(r.url).hostname.replace('www.', ''); } catch { domain = r.url; }
+        const feed = document.getElementById('feed');
+        const bar = document.createElement('div');
+        bar.className = 'msg-row bot';
+        const bub = document.createElement('div');
+        bub.className = 'bot-bub search-sources-bub';
+        const sourcesRow = document.createElement('div');
+        sourcesRow.className = 'search-sources-row';
+        const label = document.createElement('span');
+        label.className = 'search-sources-label';
+        label.innerHTML = '<i class="fa-solid fa-globe" style="font-size:11px;margin-right:4px;color:var(--accent)"></i>Sources';
+        sourcesRow.appendChild(label);
 
-                const favicon = await getFavicon(r.url);
-                const faviconHtml = favicon ? `<img src="${escHtml(favicon)}" class="search-source-favicon" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline-block';">` : '';
-                const fallbackIcon = `<i class="fa-solid fa-link" style="font-size:10px;${favicon ? 'display:none;' : ''}"></i>`;
+        const chips = await Promise.all(searchResults.slice(0, 4).map(async r => {
+            let domain = '';
+            try { domain = new URL(r.url).hostname.replace('www.', ''); } catch { domain = r.url; }
+            const favicon = await getFavicon(r.url);
+            const faviconHtml = favicon ? `<img src="${escHtml(favicon)}" class="search-source-favicon" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline-block';">` : '';
+            const fallbackIcon = `<i class="fa-solid fa-link" style="font-size:10px;${favicon ? 'display:none;' : ''}"></i>`;
+            const chip = document.createElement('a');
+            chip.href = escHtml(r.url);
+            chip.target = '_blank';
+            chip.rel = 'noopener noreferrer';
+            chip.className = 'search-source-chip';
+            chip.innerHTML = `${faviconHtml}${fallbackIcon} ${escHtml(domain)}`;
+            return chip;
+        }));
 
-                return {
-                    url: r.url,
-                    domain: domain,
-                    faviconHtml: faviconHtml + fallbackIcon
-                };
-            })
-        );
-
-        let sourcesHtml = '<div class="search-sources-bub"><div class="search-sources-row">';
-        sourcesHtml += '<span class="search-sources-label"><i class="fa-solid fa-globe" style="font-size:11px;margin-right:4px;color:var(--accent)"></i>Sources</span>';
-
-        sourcesWithFavicons.forEach(r => {
-            sourcesHtml += `<a href="${escHtml(r.url)}" target="_blank" rel="noopener noreferrer" class="search-source-chip">${r.faviconHtml} ${escHtml(r.domain)}</a>`;
-        });
-
-        sourcesHtml += '</div></div>';
-        reply += '\n\n' + sourcesHtml;
+        chips.forEach(chip => sourcesRow.appendChild(chip));
+        bub.appendChild(sourcesRow);
+        bar.appendChild(bub);
+        feed.appendChild(bar);
     }
 
-    await typewriterSwap(loading, reply, think);
     return reply;
 }
 
