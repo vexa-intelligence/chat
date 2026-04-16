@@ -2,13 +2,9 @@ const CYRON_BASE = 'https://cyron.pages.dev';
 
 async function getFavicon(url) {
     try {
-        const urlObj = new URL(url);
-        const domain = urlObj.hostname.replace('www.', '');
-        const cleanDomain = domain.replace(/\/+$/, '');
-        const faviconUrl = `https://favicon.vemetric.com/${cleanDomain}`;
-        return faviconUrl;
-    } catch (e) {
-        console.error('Favicon error:', e);
+        const domain = new URL(url).hostname.replace('www.', '').replace(/\/+$/, '');
+        return `https://favicon.vemetric.com/${domain}`;
+    } catch {
         return null;
     }
 }
@@ -135,36 +131,30 @@ async function addSearchSourcesBar(results) {
     bar.className = 'msg-row bot';
     const bub = document.createElement('div');
     bub.className = 'bot-bub search-sources-bub';
-
     const sourcesRow = document.createElement('div');
     sourcesRow.className = 'search-sources-row';
-
     const label = document.createElement('span');
     label.className = 'search-sources-label';
     label.innerHTML = '<i class="fa-solid fa-globe" style="font-size:11px;margin-right:4px;color:var(--accent)"></i>Sources';
     sourcesRow.appendChild(label);
-
-    const chipsPromises = results.slice(0, 4).map(async r => {
+    results.slice(0, 4).forEach(r => {
         let domain = '';
         try { domain = new URL(r.url).hostname.replace('www.', ''); } catch { domain = r.url; }
-
-        const favicon = await getFavicon(r.url);
-        const faviconHtml = favicon ? `<img src="${escHtml(favicon)}" class="search-source-favicon" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline-block';">` : '';
-        const fallbackIcon = `<i class="fa-solid fa-link" style="font-size:10px;${favicon ? 'display:none;' : ''}"></i>`;
-
+        const favicon = `https://favicon.vemetric.com/${domain}`;
         const chip = document.createElement('a');
         chip.href = escHtml(r.url);
         chip.target = '_blank';
         chip.rel = 'noopener noreferrer';
         chip.className = 'search-source-chip';
-        chip.innerHTML = `${faviconHtml}${fallbackIcon} ${escHtml(domain)}`;
-
-        return chip;
+        const img = document.createElement('img');
+        img.src = favicon;
+        img.className = 'search-source-favicon';
+        img.alt = '';
+        img.onerror = function () { this.style.display = 'none'; };
+        chip.appendChild(img);
+        chip.appendChild(document.createTextNode(' ' + domain));
+        sourcesRow.appendChild(chip);
     });
-
-    const chips = await Promise.all(chipsPromises);
-    chips.forEach(chip => sourcesRow.appendChild(chip));
-
     bub.appendChild(sourcesRow);
     bar.appendChild(bub);
     feed.appendChild(bar);
@@ -253,30 +243,28 @@ async function addVisitedBar(url, title) {
     bar.className = 'msg-row bot';
     const bub = document.createElement('div');
     bub.className = 'bot-bub search-sources-bub';
-
     const sourcesRow = document.createElement('div');
     sourcesRow.className = 'search-sources-row';
-
     const label = document.createElement('span');
     label.className = 'search-sources-label';
     label.innerHTML = '<i class="fa-solid fa-earth-americas" style="font-size:11px;margin-right:4px;color:var(--accent)"></i>Visited';
     sourcesRow.appendChild(label);
-
     let domain = '';
     try { domain = new URL(url).hostname.replace('www.', ''); } catch { domain = url; }
-    const displayTitle = title ? escHtml(title.slice(0, 50)) : escHtml(domain);
-
-    const favicon = await getFavicon(url);
-    const faviconHtml = favicon ? `<img src="${escHtml(favicon)}" class="search-source-favicon" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline-block';">` : '';
-    const fallbackIcon = `<i class="fa-solid fa-link" style="font-size:10px;${favicon ? 'display:none;' : ''}"></i>`;
-
+    const displayTitle = title ? title.slice(0, 50) : domain;
+    const favicon = `https://favicon.vemetric.com/${domain}`;
     const chip = document.createElement('a');
     chip.href = escHtml(url);
     chip.target = '_blank';
     chip.rel = 'noopener noreferrer';
     chip.className = 'search-source-chip';
-    chip.innerHTML = `${faviconHtml}${fallbackIcon} ${displayTitle}`;
-
+    const img = document.createElement('img');
+    img.src = favicon;
+    img.className = 'search-source-favicon';
+    img.alt = '';
+    img.onerror = function () { this.style.display = 'none'; };
+    chip.appendChild(img);
+    chip.appendChild(document.createTextNode(' ' + escHtml(displayTitle)));
     sourcesRow.appendChild(chip);
     bub.appendChild(sourcesRow);
     bar.appendChild(bub);
@@ -422,96 +410,35 @@ async function sendChatTextWithSearch(userMessage, loading, session) {
         label.className = 'search-sources-label';
         label.innerHTML = '<i class="fa-solid fa-globe" style="font-size:11px;margin-right:4px;color:var(--accent)"></i>Sources';
         sourcesRow.appendChild(label);
-
-        const chips = await Promise.all(searchResults.slice(0, 4).map(async r => {
+        searchResults.slice(0, 4).forEach(r => {
             let domain = '';
             try { domain = new URL(r.url).hostname.replace('www.', ''); } catch { domain = r.url; }
-            const favicon = await getFavicon(r.url);
-            const faviconHtml = favicon ? `<img src="${escHtml(favicon)}" class="search-source-favicon" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline-block';">` : '';
-            const fallbackIcon = `<i class="fa-solid fa-link" style="font-size:10px;${favicon ? 'display:none;' : ''}"></i>`;
+            const favicon = `https://favicon.vemetric.com/${domain}`;
             const chip = document.createElement('a');
             chip.href = escHtml(r.url);
             chip.target = '_blank';
             chip.rel = 'noopener noreferrer';
             chip.className = 'search-source-chip';
-            chip.innerHTML = `${faviconHtml}${fallbackIcon} ${escHtml(domain)}`;
-            return chip;
-        }));
-
-        chips.forEach(chip => sourcesRow.appendChild(chip));
+            const img = document.createElement('img');
+            img.src = favicon;
+            img.className = 'search-source-favicon';
+            img.alt = '';
+            img.onerror = function () { this.style.display = 'none'; };
+            chip.appendChild(img);
+            chip.appendChild(document.createTextNode(' ' + domain));
+            sourcesRow.appendChild(chip);
+        });
         bub.appendChild(sourcesRow);
         bar.appendChild(bub);
         feed.appendChild(bar);
     }
 
     return reply;
+
 }
 
 function initSearchMode() {
     injectSearchModeButton();
-
-    const style = document.createElement('style');
-    style.textContent = `
-        #searchModeBtn.active {
-            background: color-mix(in srgb, var(--accent) 12%, transparent);
-        }
-        .search-status-bub {
-            display: flex;
-            align-items: center;
-            padding: 8px 14px;
-            font-size: 0.8125rem;
-            color: var(--muted);
-            background: var(--surface);
-            border-radius: var(--radius-lg);
-            animation: pulse-opacity 1.4s ease-in-out infinite;
-        }
-        @keyframes pulse-opacity {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
-        .search-sources-bub {
-            padding: 8px 12px;
-            background: var(--surface);
-            border-radius: var(--radius-lg);
-            margin-top: 20px;
-        }
-        .search-sources-row {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            flex-wrap: wrap;
-        }
-        .search-sources-label {
-            font-size: 0.75rem;
-            color: var(--muted);
-            flex-shrink: 0;
-        }
-        .search-source-chip {
-            display: inline-flex;
-            align-items: center;
-            gap: 4px;
-            padding: 3px 9px;
-            border-radius: 999px;
-            background: var(--surface2);
-            color: var(--fg-muted);
-            font-size: 0.72rem;
-            text-decoration: none;
-            border: 1px solid var(--border-light);
-            transition: background 0.15s;
-        }
-        .search-source-chip:hover {
-            background: var(--surface3);
-            color: var(--fg);
-        }
-        .search-source-favicon {
-            width: 12px;
-            height: 12px;
-            border-radius: 2px;
-            object-fit: contain;
-            flex-shrink: 0;
-        }
-    `;
-    document.head.appendChild(style);
 
     const origSendText = window.sendText;
     window.sendText = async function (text) {
@@ -565,7 +492,7 @@ function initSearchMode() {
 
         const msgIndex = session.messages.length;
         session.messages.push({ role: 'user', content: text });
-        addBubble('user', text, msgIndex);
+        addBubbleWithThinking('user', text, msgIndex);
         const loading = addLoading();
 
         let aiReply = null;

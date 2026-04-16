@@ -118,7 +118,7 @@ async function renderAiThemes() {
     if (!container) return;
     const themes = await loadAiThemesFromFirebase();
     if (!themes.length) {
-        container.innerHTML = '<div style="font-size:0.8125rem;color:var(--muted);padding:4px 2px;">No AI themes yet. Describe one above to generate it.</div>';
+        container.innerHTML = '<div class="ai-themes-empty">No AI themes yet. Describe one above to generate it.</div>';
         return;
     }
     const activeId = localStorage.getItem('vexa_active_ai_theme');

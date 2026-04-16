@@ -3,23 +3,24 @@ const RESEARCH_SOURCES_COUNT = 6;
 
 async function getFavicon(url) {
     try {
-        const urlObj = new URL(url);
-        const domain = urlObj.hostname.replace('www.', '');
-        const cleanDomain = domain.replace(/\/+$/, '');
-        return `https://favicon.vemetric.com/${cleanDomain}`;
+        const domain = new URL(url).hostname.replace('www.', '').replace(/\/+$/, '');
+        return `https://favicon.vemetric.com/${domain}`;
     } catch {
         return null;
     }
 }
 
 async function sendChatTextWithThinking(userMessage, loading, session) {
-    console.log('DEBUG: Thinking mode activated for message:', userMessage);
     const history = buildConversationHistory(session);
 
     const thinkingSystemAddition = `
 You are an advanced reasoning assistant. When you think through a problem, wrap your internal reasoning in <think>...</think> tags before giving your final answer. Be thorough in your reasoning, explore multiple angles, and then present a clean, clear final response after the thinking block.
 
-IMPORTANT: Always start your response with <think> tags containing your step-by-step reasoning process, then close with </think> tags, then provide your final answer.`;
+IMPORTANT: Always start your response with <think> tags containing your step-by-step reasoning process. Format your thinking as follows:
+- Start with "So the user said..." followed by a brief restatement of their question
+- Then explain your reasoning process with multiple points (reason, reason, reason)
+- End with your conclusion or approach
+Then close with </think> tags, then provide your final answer.`;
 
     const messages = [
         { role: 'system', content: buildSystemPrompt() + thinkingSystemAddition },
@@ -43,16 +44,11 @@ IMPORTANT: Always start your response with <think> tags containing your step-by-
     let reply = String(extractText(raw)).trim();
     let think = null;
 
-    console.log('DEBUG: Raw AI reply for thinking mode:', reply);
-
     const m = reply.match(/<think>([\s\S]*?)<\/think>/i);
     if (m) {
         think = m[1].trim();
         reply = reply.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
-        console.log('DEBUG: Extracted thinking content:', think);
-        console.log('DEBUG: Cleaned reply:', reply);
     } else {
-        console.log('DEBUG: No <think> tags found in AI reply - generating fallback thinking');
 
         try {
             const thinkRes = await fetch(`${CONFIG.BASE}/chat`, {
@@ -61,7 +57,7 @@ IMPORTANT: Always start your response with <think> tags containing your step-by-
                 body: JSON.stringify({
                     model: currentModel || 'vexa',
                     messages: [
-                        { role: 'system', content: 'You are a reasoning assistant. Provide step-by-step thinking for this question. Be analytical and break down the problem. Output 3-5 sentences showing your thought process.' },
+                        { role: 'system', content: 'You are a reasoning assistant. Provide step-by-step thinking for this question. Format your thinking as: "So the user said..." followed by your reasoning points, then your conclusion. Be analytical and break down the problem. Output 3-5 sentences showing your thought process.' },
                         { role: 'user', content: userMessage }
                     ]
                 })
@@ -71,16 +67,13 @@ IMPORTANT: Always start your response with <think> tags containing your step-by-
                 const thinkRaw = await thinkRes.json();
                 if (thinkRaw.success) {
                     think = String(extractText(thinkRaw)).trim();
-                    console.log('DEBUG: Generated fallback thinking:', think);
                 }
             }
         } catch (err) {
-            console.log('DEBUG: Failed to generate fallback thinking');
         }
 
         if (!think) {
-            think = `Let me think through this step by step. The question is asking for "${userMessage}". I need to consider the key concepts and provide a precise answer.`;
-            console.log('DEBUG: Using simple fallback thinking');
+            think = `So the user said "${userMessage}". I need to understand what they're asking and provide a helpful response based on the context.`;
         }
     }
 
@@ -143,7 +136,7 @@ async function typewriterSwapWithThinking(row, text, think) {
                 </div>
             </button>
             <div class="think-content open">
-                <div class="think-content-inner">${escHtml(think)}</div>
+                <div class="think-content-inner"></div>
             </div>`;
         let open = true;
         const btn = block.querySelector('.think-toggle-btn');
@@ -157,6 +150,15 @@ async function typewriterSwapWithThinking(row, text, think) {
             label.textContent = open ? 'Hide thinking' : 'Show thinking';
         });
         bub.appendChild(block);
+
+        const thinkInner = block.querySelector('.think-content-inner');
+        let thinkRendered = '';
+        for (let i = 0; i < think.length; i++) {
+            thinkRendered += think[i];
+            thinkInner.textContent = thinkRendered;
+            scrollBottom();
+            await sleep(3);
+        }
     }
 
     const textEl = document.createElement('div');
@@ -311,51 +313,53 @@ async function sendDeepResearch(userMessage, loading, session) {
     if (searchResults.length) {
         const sourceBar = document.createElement('div');
         sourceBar.className = 'dr-final-sources';
-        sourceBar.innerHTML = `<span class="dr-final-sources-label"><i class="fa-solid fa-globe" style="font-size:11px;margin-right:5px;color:var(--accent)"></i>Sources</span>`;
-
-        const chipsPromises = searchResults.slice(0, 4).map(async r => {
+        const sourceLabel = document.createElement('span');
+        sourceLabel.className = 'dr-final-sources-label';
+        sourceLabel.innerHTML = '<i class="fa-solid fa-globe" style="font-size:11px;margin-right:5px;color:var(--accent)"></i>Sources';
+        sourceBar.appendChild(sourceLabel);
+        searchResults.slice(0, 4).forEach(r => {
             let domain = r.url;
             try { domain = new URL(r.url).hostname.replace('www.', ''); } catch { }
-
-            const favicon = await getFavicon(r.url);
-            const faviconHtml = favicon ? `<img src="${escHtml(favicon)}" class="search-source-favicon" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline-block';">` : '';
-            const fallbackIcon = `<i class="fa-solid fa-link" style="font-size:10px;${favicon ? 'display:none;' : ''}"></i>`;
-
+            const favicon = `https://favicon.vemetric.com/${domain}`;
             const chip = document.createElement('a');
             chip.href = r.url;
             chip.target = '_blank';
             chip.rel = 'noopener noreferrer';
             chip.className = 'search-source-chip';
-            chip.innerHTML = `${faviconHtml}${fallbackIcon} ${escHtml(domain)}`;
-
-            return chip;
+            const img = document.createElement('img');
+            img.src = favicon;
+            img.className = 'search-source-favicon';
+            img.alt = '';
+            img.onerror = function () { this.style.display = 'none'; };
+            chip.appendChild(img);
+            chip.appendChild(document.createTextNode(' ' + domain));
+            sourceBar.appendChild(chip);
         });
-
-        const chips = await Promise.all(chipsPromises);
-        chips.forEach(chip => sourceBar.appendChild(chip));
         finalBub.appendChild(sourceBar);
-    }
 
-    const textEl = document.createElement('div');
-    textEl.className = 'bot-bub-content';
-    finalBub.appendChild(textEl);
+        const textEl = document.createElement('div');
+        textEl.className = 'bot-bub-content';
+        finalBub.appendChild(textEl);
 
-    const tokens = tokenize(reply);
-    let rendered = '';
-    for (let i = 0; i < tokens.length; i++) {
-        rendered += tokens[i];
+        const tokens = tokenize(reply);
+        let rendered = '';
+        for (let i = 0; i < tokens.length; i++) {
+            rendered += tokens[i];
+            textEl.innerHTML = fmt(rendered);
+            await sleep(tokens[i].length > 3 ? 4 : 12);
+        }
         textEl.innerHTML = fmt(rendered);
-        await sleep(tokens[i].length > 3 ? 4 : 12);
+        attachCodeCopyListeners(loading);
+
+        const actionsEl = document.createElement('div');
+        actionsEl.className = 'msg-actions';
+        actionsEl.innerHTML = '<button class="copy-text-btn" title="Copy"><i class="fa-regular fa-copy"></i> Copy</button>';
+        finalBub.appendChild(actionsEl);
+        attachCopyText(loading, () => reply);
+
+
+        return reply;
     }
-    textEl.innerHTML = fmt(rendered);
-    attachCodeCopyListeners(loading);
-
-    const actionsEl = document.createElement('div');
-    actionsEl.className = 'msg-actions';
-    actionsEl.innerHTML = '<button class="copy-text-btn" title="Copy"><i class="fa-regular fa-copy"></i> Copy</button>';
-    finalBub.appendChild(actionsEl);
-    attachCopyText(loading, () => reply);
-
 }
 
 async function sendChatWithVisionImages(text, images, loading, session) {

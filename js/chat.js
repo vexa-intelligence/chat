@@ -1,4 +1,4 @@
-let busy = false;
+﻿let busy = false;
 let currentAbortController = null;
 let chatSessions = [];
 let currentSessionId = null;
@@ -10,6 +10,11 @@ let editingMsgIndex = null;
 const IMG_RE = /\b(generate|create|draw|make|paint|render|produce|design|imagine)\s+(an?\s+)?(image|picture|photo|illustration|artwork|painting|drawing|portrait|landscape|scene|wallpaper)\b|\b(image|picture|photo|illustration|artwork|painting|drawing|portrait|landscape|scene|wallpaper)\b/i;
 
 function isImg(t) { return IMG_RE.test(t); }
+
+function isStreamingEnabled() {
+    const settings = typeof getVexaSettings === 'function' ? getVexaSettings() : {};
+    return settings.streaming !== false;
+}
 
 function cleanImgPrompt(t) {
     return t.replace(/['"]/g, '')
@@ -161,12 +166,12 @@ function fmt(raw) {
         const taskDone = line.match(/^(\s*)[*\-]\s+\[x\]\s+(.*)$/i);
         const taskTodo = line.match(/^(\s*)[*\-]\s+\[\s*\]\s+(.*)$/);
         if (taskDone) {
-            output.push(`<li class="task-item done"><span class="task-check">✓</span> ${taskDone[2]}</li>`);
+            output.push(`<li class="task-item done"><span class="task-check">âœ“</span> ${taskDone[2]}</li>`);
             i++;
             continue;
         }
         if (taskTodo) {
-            output.push(`<li class="task-item todo"><span class="task-check">☐</span> ${taskTodo[2]}</li>`);
+            output.push(`<li class="task-item todo"><span class="task-check">â˜</span> ${taskTodo[2]}</li>`);
             i++;
             continue;
         }
@@ -398,7 +403,7 @@ function cancelEdit() {
     }
 }
 
-function addBubbleWithThinking(role, text, msgIndex, thinkingContent = null) {
+function addBubbleWithThinking(role, text, msgIndex, thinkingContent = null, researchContent = null) {
     const feed = document.getElementById('feed');
     const row = document.createElement('div');
     row.className = 'msg-row ' + (role === 'user' ? 'user' : 'bot');
@@ -438,8 +443,72 @@ function addBubbleWithThinking(role, text, msgIndex, thinkingContent = null) {
 
         const bub = document.createElement('div');
         bub.className = 'bot-bub';
+
+        if (thinkingContent) {
+            const block = document.createElement('div');
+            block.className = 'think-block';
+            block.innerHTML = `
+                <button class="think-toggle-btn">
+                    <div class="think-toggle-left">
+                        <svg viewBox="0 0 24 24" fill="currentColor" class="think-sparkle-icon"><path d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5L12 2Z"/></svg>
+                        <span class="think-toggle-label">Thought for a moment</span>
+                    </div>
+                    <div class="think-toggle-right">
+                        <span class="think-show-hide">Show thinking</span>
+                        <svg class="think-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                    </div>
+                </button>
+                <div class="think-content">
+                    <div class="think-content-inner"></div>
+                </div>`;
+            let open = true;
+            const btn = block.querySelector('.think-toggle-btn');
+            const content = block.querySelector('.think-content');
+            const label = block.querySelector('.think-show-hide');
+            const chevron = block.querySelector('.think-chevron');
+            const thinkInner = block.querySelector('.think-content-inner');
+            thinkInner.textContent = thinkingContent;
+            btn.addEventListener('click', () => {
+                open = !open;
+                content.classList.toggle('open', open);
+                chevron.classList.toggle('open', open);
+                label.textContent = open ? 'Hide thinking' : 'Show thinking';
+            });
+            bub.appendChild(block);
+        }
+
+        if (researchContent && researchContent.sources && researchContent.sources.length) {
+            const sourceBar = document.createElement('div');
+            sourceBar.className = 'dr-final-sources';
+            sourceBar.innerHTML = `<span class="dr-final-sources-label"><i class="fa-solid fa-globe" style="font-size:11px;margin-right:5px;color:var(--accent)"></i>Sources</span>`;
+
+            researchContent.sources.slice(0, 4).forEach(r => {
+                let domain = r.url;
+                try { domain = new URL(r.url).hostname.replace('www.', ''); } catch { }
+
+                const chip = document.createElement('a');
+                chip.href = r.url;
+                chip.target = '_blank';
+                chip.rel = 'noopener noreferrer';
+                chip.className = 'search-source-chip';
+                chip.innerHTML = `<i class="fa-solid fa-link" style="font-size:10px"></i> ${escHtml(domain)}`;
+                sourceBar.appendChild(chip);
+            });
+
+            bub.appendChild(sourceBar);
+        }
+
         const rendered = fmt(text);
-        bub.innerHTML = `<div class="bot-bub-content">${rendered}</div><div class="msg-actions"><button class="copy-text-btn" title="Copy message"><i class="fa-regular fa-copy"></i> Copy</button></div>`;
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'bot-bub-content';
+        contentDiv.innerHTML = rendered;
+        bub.appendChild(contentDiv);
+
+        const actionsEl = document.createElement('div');
+        actionsEl.className = 'msg-actions';
+        actionsEl.innerHTML = '<button class="copy-text-btn" title="Copy message"><i class="fa-regular fa-copy"></i> Copy</button>';
+        bub.appendChild(actionsEl);
+
         if (showTs) {
             const tsEl = document.createElement('div');
             tsEl.className = 'msg-timestamp';
@@ -476,6 +545,65 @@ function swapText(row, text) {
     attachCodeCopyListeners(row);
 }
 
+async function generateImageCaption(prompt) {
+    try {
+        const response = await fetch(`${CONFIG.BASE}/chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                model: currentModel || 'vexa',
+                messages: [
+                    {
+                        role: 'system',
+                        content: `You are an expert art critic and image describer. Create a compelling, artistic caption (3-6 words) for an image generated from this prompt: "${prompt}". 
+
+Requirements:
+- Focus on the artistic style, mood, and key visual elements
+- Use evocative, descriptive language
+- Avoid literal repetition of the prompt
+- Create something that sounds like a professional art gallery caption
+- Examples: "Serene mountain landscape", "Playful puppy portrait", "Abstract digital art", "Majestic wildlife photography"
+- Return ONLY the caption, no quotes or explanation`
+                    },
+                    { role: 'user', content: `Create an artistic caption for an image generated with: ${prompt}` }
+                ]
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to generate caption');
+        }
+
+        const data = await response.json();
+        if (!data.success) {
+            throw new Error(data.error || 'Failed to generate caption');
+        }
+
+        let caption = data.reply || '';
+        caption = caption.replace(/^["']|["']$/g, '').trim();
+        caption = caption.replace(/^(Image generated|Generated image|Image caption|Caption|Here is|The caption is)[:\s]*/i, '').trim();
+
+        if (caption.length < 4 || /^(a|an|the|image|picture)$/.test(caption.toLowerCase())) {
+            const words = prompt.toLowerCase().split(' ');
+            const styleWords = ['realistic', 'cartoon', 'abstract', 'oil painting', 'watercolor', 'digital art', 'photography', 'portrait', 'landscape'];
+            const subjectWords = ['dog', 'cat', 'person', 'landscape', 'mountain', 'ocean', 'city', 'forest', 'animal', 'portrait'];
+
+            let style = words.find(w => styleWords.includes(w)) || 'artistic';
+            let subject = words.find(w => subjectWords.includes(w)) || 'creation';
+
+            style = style.charAt(0).toUpperCase() + style.slice(1);
+            subject = subject.charAt(0).toUpperCase() + subject.slice(1);
+
+            caption = `${style} ${subject}`;
+        }
+
+        return caption || prompt;
+    } catch (error) {
+        console.error('Failed to generate AI caption:', error);
+        return prompt;
+    }
+}
+
 function swapImage(row, url, prompt) {
     const bub = row.querySelector('.bot-bub');
     bub.innerHTML = '';
@@ -483,7 +611,7 @@ function swapImage(row, url, prompt) {
     wrap.className = 'gen-img-wrap';
     const cap = document.createElement('div');
     cap.className = 'gen-img-cap';
-    cap.textContent = prompt;
+    cap.textContent = 'Generating caption...';
     const img = document.createElement('img');
     img.className = 'gen-img';
     img.src = url;
@@ -495,6 +623,10 @@ function swapImage(row, url, prompt) {
     wrap.appendChild(img);
     bub.appendChild(wrap);
     saveMyImage(url, prompt);
+
+    generateImageCaption(prompt).then(aiCaption => {
+        cap.textContent = aiCaption;
+    });
 }
 
 async function typewriterSwap(row, text, think) {
@@ -515,120 +647,42 @@ async function typewriterSwap(row, text, think) {
                 </div>
             </button>
             <div class="think-content">
-                <div class="think-content-inner">${escHtml(think)}</div>
+                <div class="think-content-inner"></div>
             </div>`;
         let open = true;
-        const btn = block.querySelector('.think-toggle');
-        const drawer = block.querySelector('.think-drawer');
-        const pill = block.querySelector('.think-pill');
-        drawer.classList.add('open');
-        pill.textContent = 'Hide';
-        pill.classList.add('active');
+        const btn = block.querySelector('.think-toggle-btn');
+        const content = block.querySelector('.think-content');
+        const label = block.querySelector('.think-show-hide');
+        const chevron = block.querySelector('.think-chevron');
         btn.addEventListener('click', () => {
             open = !open;
-            drawer.classList.toggle('open', open);
-            pill.textContent = open ? 'Hide' : 'Show';
-            pill.classList.toggle('active', open);
+            content.classList.toggle('open', open);
+            chevron.classList.toggle('open', open);
+            label.textContent = open ? 'Hide thinking' : 'Show thinking';
         });
         bub.appendChild(block);
+
+        const thinkInner = block.querySelector('.think-content-inner');
+        let thinkRendered = '';
+        for (let i = 0; i < think.length; i++) {
+            thinkRendered += think[i];
+            thinkInner.textContent = thinkRendered;
+            scrollBottom();
+            await sleep(3);
+        }
     }
+
     const textEl = document.createElement('div');
     textEl.className = 'bot-bub-content';
     bub.appendChild(textEl);
 
     const tokens = tokenize(text);
     let rendered = '';
-    let inCodeBlock = false;
-    let codeBlockStart = 0;
-    let codeLang = '';
 
     for (let i = 0; i < tokens.length; i++) {
         rendered += tokens[i];
-
-        const tripleBacktickMatches = rendered.match(/```/g);
-        const tripleCount = tripleBacktickMatches ? tripleBacktickMatches.length : 0;
-
-        if (rendered.includes('```')) {
-            if (!inCodeBlock && tripleCount % 2 === 1) {
-                inCodeBlock = true;
-                codeBlockStart = rendered.lastIndexOf('```');
-                const afterTick = rendered.substring(codeBlockStart + 3);
-                const langMatch = afterTick.match(/^(\w+)/);
-                codeLang = langMatch ? langMatch[1] : '';
-
-                if (!textEl.querySelector('.code-block-wrap:last-child') ||
-                    textEl.querySelector('.code-block-wrap:last-child').dataset.complete === 'true') {
-                    const codeWrapper = document.createElement('div');
-                    codeWrapper.className = 'code-block-wrap';
-                    codeWrapper.innerHTML = `
-                        <div class="code-block-header">
-                            <span class="code-lang-label">${escHtml(codeLang)}</span>
-                            <button class="copy-code-btn" title="Copy code">
-                                <i class="fa-regular fa-copy"></i> Copy
-                            </button>
-                        </div>
-                        <pre><code class="hljs language-${codeLang || 'plaintext'}"></code></pre>
-                    `;
-                    textEl.appendChild(codeWrapper);
-
-                    const copyBtn = codeWrapper.querySelector('.copy-code-btn');
-                    copyBtn.addEventListener('click', () => {
-                        const code = codeWrapper.querySelector('code').innerText || codeWrapper.querySelector('code').textContent;
-                        navigator.clipboard.writeText(code).then(() => {
-                            copyBtn.innerHTML = '<i class="fa-solid fa-check"></i> Copied';
-                            setTimeout(() => { copyBtn.innerHTML = '<i class="fa-regular fa-copy"></i> Copy'; }, 2000);
-                        }).catch(() => {
-                            const ta = document.createElement('textarea');
-                            ta.value = code;
-                            document.body.appendChild(ta);
-                            ta.select();
-                            document.execCommand('copy');
-                            document.body.removeChild(ta);
-                            copyBtn.innerHTML = '<i class="fa-solid fa-check"></i> Copied';
-                            setTimeout(() => { copyBtn.innerHTML = '<i class="fa-regular fa-copy"></i> Copy'; }, 2000);
-                        });
-                    });
-                }
-            } else {
-                if (inCodeBlock) {
-                    inCodeBlock = false;
-                    const codeContent = rendered.substring(codeBlockStart + 3 + codeLang.length).replace(/```[\s\S]*$/, '');
-                    const codeElement = textEl.querySelector('.code-block-wrap:last-child code');
-                    if (codeElement) {
-                        codeElement.textContent = codeContent;
-                        if (window.hljs && codeLang) {
-                            try {
-                                const highlighted = window.hljs.highlight(codeContent, { language: detectLang(codeLang), ignoreIllegals: true }).value;
-                                codeElement.innerHTML = highlighted;
-                            } catch { }
-                        }
-                    }
-                }
-            }
-        }
-
-        if (!inCodeBlock) {
-            textEl.innerHTML = fmt(rendered);
-        } else {
-            const codeElement = textEl.querySelector('.code-block-wrap:last-child code');
-            if (codeElement) {
-                const afterCodeStart = rendered.substring(codeBlockStart + 3 + codeLang.length);
-                const codeContent = afterCodeStart.replace(/```[\s\S]*$/, '');
-
-                codeElement.textContent = codeContent;
-                if (window.hljs && codeLang) {
-                    try {
-                        const highlighted = window.hljs.highlight(codeContent, { language: detectLang(codeLang), ignoreIllegals: true }).value;
-                        codeElement.innerHTML = highlighted;
-                    } catch { }
-                }
-            }
-        }
-
-        if (tokens[i].trim() && window.haptic) {
-            window.haptic();
-        }
-
+        textEl.innerHTML = fmt(rendered);
+        scrollBottom();
         await sleep(tokens[i].length > 3 ? 5 : 14);
     }
 
@@ -637,7 +691,7 @@ async function typewriterSwap(row, text, think) {
 
     const actionsEl = document.createElement('div');
     actionsEl.className = 'msg-actions';
-    actionsEl.innerHTML = '<button class="copy-text-btn" title="Copy message"><i class="fa-regular fa-copy"></i> Copy</button>';
+    actionsEl.innerHTML = '<button class="copy-text-btn" title="Copy"><i class="fa-regular fa-copy"></i> Copy</button>';
     bub.appendChild(actionsEl);
     attachCopyText(row, () => text);
 }
@@ -787,10 +841,12 @@ function buildSystemPrompt() {
     const timeOfDay = now.getHours() < 12 ? 'morning' : now.getHours() < 17 ? 'afternoon' : 'evening';
     const dateStr = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 
-    let system = `You are Vexa, a sharp, witty, deeply personal AI. Today is ${dateStr} (${timeOfDay}). You remember everything said in this conversation and reference it naturally. You never repeat yourself, never give generic filler answers. You are direct, insightful, and adapt your tone to the user. When you don't know something, say so plainly. Never start replies with "Of course!", "Certainly!", "Great question!", or sycophantic openers.`;
+    let system = `You are Vexa, a sharp, witty, deeply personal AI. Today is ${dateStr} (${timeOfDay}). You remember everything said in this conversation and reference it naturally. You never repeat yourself, never give generic filler answers. You are direct, insightful, and adapt your tone to the user. When you don't know something, say so plainly. Never start replies with "Of course!", "Certainly!", "Great question!", or sycophantic openers.
+
+When you include internal reasoning in  tags, format it as: "So the user said..." followed by your reasoning points, then your conclusion. This makes your thinking clear and structured.`;
 
     const toneMap = {
-        balanced: 'Be clear and human — not robotic, not overly formal.',
+        balanced: 'Be clear and human â€” not robotic, not overly formal.',
         professional: 'Use professional, precise language. Stay concise.',
         casual: 'Be casual and conversational, like a knowledgeable friend.',
         concise: 'Be extremely concise. One or two sentences max unless more is truly needed.',
@@ -823,7 +879,7 @@ function buildSystemPrompt() {
 
     if (s.responseLength) {
         const lenMap = {
-            short: 'Keep all responses brief — cut anything that isn\'t essential.',
+            short: 'Keep all responses brief â€” cut anything that isn\'t essential.',
             balanced: '',
             detailed: 'Give full, detailed responses. Include examples, nuance, and context.'
         };
@@ -908,7 +964,7 @@ async function sendChatText(userMessage, loading, session) {
     let think = null;
     const m = reply.match(/<think>([\s\S]*?)<\/think>/i);
     if (m) { think = m[1].trim(); reply = reply.replace(/<think>[\s\S]*?<\/think>/gi, '').trim(); }
-    await typewriterSwap(loading, reply, think);
+    if (isStreamingEnabled()) { await typewriterSwap(loading, reply, think); } else { swapText(loading, reply); }
     return reply;
 }
 
@@ -978,9 +1034,9 @@ async function getImageDescription(dataUrl) {
             const aspect = img.width > img.height * 1.2 ? 'landscape/wide' : img.height > img.width * 1.2 ? 'portrait/tall' : 'square';
             const res = `${img.width}x${img.height}px`;
 
-            resolve(`[Image attached — ${res}, ${aspect} orientation, ${brightnessDesc}, dominant tone: ${dominant}. Avg RGB: ${r},${g},${b}]`);
+            resolve(`[Image attached â€” ${res}, ${aspect} orientation, ${brightnessDesc}, dominant tone: ${dominant}. Avg RGB: ${r},${g},${b}]`);
         };
-        img.onerror = () => resolve('[Image attached — could not analyze]');
+        img.onerror = () => resolve('[Image attached â€” could not analyze]');
         img.src = dataUrl;
     });
 }
@@ -1016,7 +1072,7 @@ async function sendChatWithImages(text, images, loading, session) {
     let think = null;
     const m = reply.match(/<think>([\s\S]*?)<\/think>/i);
     if (m) { think = m[1].trim(); reply = reply.replace(/<think>[\s\S]*?<\/think>/gi, '').trim(); }
-    await typewriterSwap(loading, reply, think);
+    if (isStreamingEnabled()) { await typewriterSwap(loading, reply, think); } else { swapText(loading, reply); }
     return reply;
 }
 
@@ -1167,6 +1223,12 @@ async function sendText(text) {
                 content: replyContent.content,
                 thinking: replyContent.thinking
             });
+        } else if (typeof replyContent === 'object' && replyContent.research) {
+            session.messages.push({
+                role: 'assistant',
+                content: replyContent.content,
+                research: replyContent.research
+            });
         } else {
             session.messages.push({ role: 'assistant', content: replyContent });
         }
@@ -1283,13 +1345,16 @@ async function loadSessionIntoChat(session) {
 
         session.messages.forEach((msg, index) => {
             let content = msg.content;
+
             if (typeof content === 'string') {
                 try {
                     const parsed = JSON.parse(content);
                     if (parsed && typeof parsed === 'object' && parsed.type === 'image') {
                         content = parsed;
                     }
-                } catch { }
+                } catch (e) {
+                }
+            } else if (content && typeof content === 'object' && content.type === 'image') {
             }
 
             if (content && typeof content === 'object' && content.type === 'image') {
@@ -1302,11 +1367,16 @@ async function loadSessionIntoChat(session) {
                 }
             } else {
                 let displayContent = content;
+
                 if (typeof displayContent === 'object' && displayContent !== null) {
-                    displayContent = displayContent.content || String(displayContent);
+                    if (displayContent.type === 'image') {
+                        return;
+                    } else {
+                        displayContent = displayContent.content || displayContent.prompt || JSON.stringify(displayContent);
+                    }
                 }
 
-                addBubbleWithThinking(msg.role === 'user' ? 'user' : 'bot', displayContent, msg.role === 'user' ? index : undefined, msg.role === 'assistant' ? (msg.thinking || null) : null);
+                addBubbleWithThinking(msg.role === 'user' ? 'user' : 'bot', displayContent, msg.role === 'user' ? index : undefined, msg.role === 'assistant' ? (msg.thinking || null) : null, msg.research || null);
             }
         });
         renderChatHistory();
@@ -1618,7 +1688,7 @@ function openSearchModal() {
     resetSearchResults();
 }
 
-function addBubbleWithThinking(role, text, msgIndex, thinkingContent = null) {
+function addBubbleWithThinking(role, text, msgIndex, thinkingContent = null, researchContent = null) {
     const feed = document.getElementById('feed');
     const row = document.createElement('div');
     row.className = 'msg-row ' + (role === 'user' ? 'user' : 'bot');
@@ -1691,6 +1761,27 @@ function addBubbleWithThinking(role, text, msgIndex, thinkingContent = null) {
             bub.appendChild(thinkBlock);
         }
 
+        if (researchContent && researchContent.sources && researchContent.sources.length) {
+            const sourceBar = document.createElement('div');
+            sourceBar.className = 'dr-final-sources';
+            sourceBar.innerHTML = `<span class="dr-final-sources-label"><i class="fa-solid fa-globe" style="font-size:11px;margin-right:5px;color:var(--accent)"></i>Sources</span>`;
+
+            researchContent.sources.slice(0, 4).forEach(r => {
+                let domain = r.url;
+                try { domain = new URL(r.url).hostname.replace('www.', ''); } catch { }
+
+                const chip = document.createElement('a');
+                chip.href = r.url;
+                chip.target = '_blank';
+                chip.rel = 'noopener noreferrer';
+                chip.className = 'search-source-chip';
+                chip.innerHTML = `<i class="fa-solid fa-link" style="font-size:10px"></i> ${escHtml(domain)}`;
+                sourceBar.appendChild(chip);
+            });
+
+            bub.appendChild(sourceBar);
+        }
+
         const rendered = fmt(text);
         const contentDiv = document.createElement('div');
         contentDiv.className = 'bot-bub-content';
@@ -1716,6 +1807,7 @@ function addBubbleWithThinking(role, text, msgIndex, thinkingContent = null) {
     }
 
     feed.appendChild(row);
+    return row;
 }
 
 function loadSessionIntoChatWithThinking(session) {
@@ -1727,14 +1819,42 @@ function loadSessionIntoChatWithThinking(session) {
 
     session.messages.forEach((msg, index) => {
         let content = msg.content;
-        if (typeof content === 'object' && content !== null) {
-            content = content.content || String(content);
+
+        if (typeof content === 'string') {
+            try {
+                const parsed = JSON.parse(content);
+                if (parsed && typeof parsed === 'object' && parsed.type === 'image') {
+                    content = parsed;
+                }
+            } catch (e) {
+            }
+        } else if (content && typeof content === 'object' && content.type === 'image') {
         }
 
-        if (msg.role === 'user') {
-            addBubbleWithThinking('user', content, index);
-        } else if (msg.role === 'assistant') {
-            addBubbleWithThinking('bot', content, index, msg.thinking || null);
+        if (content && typeof content === 'object' && content.type === 'image') {
+            const row = addBubbleWithThinking(msg.role === 'user' ? 'user' : 'bot', '', msg.role === 'user' ? index : undefined);
+            if (msg.role === 'assistant') {
+                const imageUrl = content.dataUrl || content.url;
+                if (imageUrl) {
+                    swapImage(row, imageUrl, content.prompt);
+                }
+            }
+        } else {
+            let displayContent = content;
+
+            if (typeof displayContent === 'object' && displayContent !== null) {
+                if (displayContent.type === 'image') {
+                    return;
+                } else {
+                    displayContent = displayContent.content || displayContent.prompt || JSON.stringify(displayContent);
+                }
+            }
+
+            if (msg.role === 'user') {
+                addBubbleWithThinking('user', displayContent, index);
+            } else if (msg.role === 'assistant') {
+                addBubbleWithThinking('bot', displayContent, index, msg.thinking || null, msg.research || null);
+            }
         }
     });
 

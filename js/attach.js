@@ -24,7 +24,6 @@ function isDeepResearch() { return deepResearchEnabled; }
 
 function toggleThinkingMode() {
     thinkingModeEnabled = !thinkingModeEnabled;
-    console.log('DEBUG: Thinking mode toggled to:', thinkingModeEnabled);
     if (thinkingModeEnabled) deepResearchEnabled = false;
     setVexaSetting('thinkingMode', thinkingModeEnabled);
     setVexaSetting('deepResearch', false);
@@ -34,7 +33,6 @@ function toggleThinkingMode() {
 
 function toggleDeepResearch() {
     deepResearchEnabled = !deepResearchEnabled;
-    console.log('DEBUG: Deep research mode toggled to:', deepResearchEnabled);
     if (deepResearchEnabled) thinkingModeEnabled = false;
     setVexaSetting('deepResearch', deepResearchEnabled);
     setVexaSetting('thinkingMode', false);
@@ -44,12 +42,10 @@ function toggleDeepResearch() {
 
 function toggleWebSearch() {
     if (typeof toggleSearchMode === 'function') {
-        console.log('DEBUG: Web search toggle requested');
         toggleSearchMode();
     }
     if (typeof isSearchMode === 'function') {
         const newState = isSearchMode();
-        console.log('DEBUG: Web search mode after toggle:', newState);
         setVexaSetting('searchMode', newState);
     }
     updateAttachBtnIcon();
@@ -240,93 +236,21 @@ function injectAttachButton() {
 document.addEventListener('DOMContentLoaded', () => {
     function restoreAttachModes() {
         const s = typeof getVexaSettings === 'function' ? getVexaSettings() : {};
-        console.log('DEBUG: Restoring modes from settings:', s);
         thinkingModeEnabled = !!s.thinkingMode;
         deepResearchEnabled = !!s.deepResearch;
 
         if (typeof toggleSearchMode === 'function' && typeof isSearchMode === 'function') {
             const currentSearchMode = isSearchMode();
             const savedSearchMode = s.searchMode;
-            console.log('DEBUG: Search mode - Saved:', savedSearchMode, 'Current:', currentSearchMode);
 
             if (savedSearchMode !== currentSearchMode) {
-                console.log('DEBUG: Toggling search mode to match saved setting');
                 toggleSearchMode();
             }
         }
         updateAttachBtnIcon();
         updateDropdownActiveStates();
-        console.log('DEBUG: Final modes - Thinking:', thinkingModeEnabled, 'Research:', deepResearchEnabled, 'Search:', typeof isSearchMode === 'function' ? isSearchMode() : 'unknown');
     }
 
     injectAttachButton();
     restoreAttachModes();
-
-    const styleSheet = document.createElement('style');
-    styleSheet.textContent = `
-        .input-images-row {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            padding: 10px 14px 0;
-        }
-
-        .input-image-preview {
-            position: relative;
-            width: 72px;
-            height: 72px;
-            border-radius: 10px;
-            overflow: visible;
-            flex-shrink: 0;
-        }
-
-        .input-image-preview img {
-            width: 72px;
-            height: 72px;
-            object-fit: cover;
-            border-radius: 10px;
-            border: 1.5px solid var(--border);
-            display: block;
-        }
-
-        .img-preview-remove {
-            position: absolute;
-            top: -6px;
-            right: -6px;
-            width: 18px;
-            height: 18px;
-            background: var(--fg);
-            color: var(--bg);
-            border: none;
-            border-radius: 50%;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: transform 0.15s;
-            z-index: 2;
-        }
-
-        .img-preview-remove:hover { transform: scale(1.15); }
-
-        .attach-dropdown-item.active-mode {
-            background: color-mix(in srgb, var(--accent) 10%, transparent);
-        }
-
-        .attach-dropdown-item.active-mode .main-text {
-            color: var(--accent);
-        }
-
-        .attach-dropdown-item .mode-check {
-            margin-left: auto;
-            font-size: 11px;
-            color: var(--accent);
-            display: none;
-        }
-
-        .attach-dropdown-item.active-mode .mode-check {
-            display: block;
-        }
-    `;
-    document.head.appendChild(styleSheet);
 });

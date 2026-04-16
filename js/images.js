@@ -108,7 +108,20 @@ async function loadImagesFromFirebase() {
           const parsedImages = JSON.parse(data.images);
 
           savedImages = await Promise.all(parsedImages.map(async img => {
-            if (img.base64 && !img.blob) {
+            if (img.cloudinaryUrl) {
+              let stableUrl = img.cloudinaryUrl;
+              if (stableUrl.includes('/v')) {
+                stableUrl = stableUrl.replace(/\/v\d+\//, '/');
+              }
+              return {
+                ...img,
+                url: stableUrl,
+                storageUrl: stableUrl,
+                cloudinaryUrl: stableUrl,
+                blob: null
+              };
+            }
+            else if (img.base64 && !img.blob) {
               try {
                 const blobUrl = img.base64.startsWith('data:') ? img.base64 : URL.createObjectURL(await (await fetch(img.base64)).blob());
 
@@ -164,6 +177,54 @@ async function compressImage(blob, quality = 0.7, maxWidth = 1024, maxHeight = 1
   });
 }
 
+async function uploadToCloudinary(blob, filename = null) {
+  if (!blob || !CONFIG.CLOUDINARY_CONFIG) {
+    throw new Error('Missing blob or Cloudinary configuration');
+  }
+
+  try {
+    const formData = new FormData();
+    formData.append('file', blob);
+    formData.append('upload_preset', CONFIG.CLOUDINARY_CONFIG.uploadPreset);
+    formData.append('api_key', CONFIG.CLOUDINARY_CONFIG.apiKey);
+
+    if (filename) {
+      formData.append('public_id', filename);
+    }
+
+    const response = await fetch(
+      `https://api.cloudinary.com/v1_1/${CONFIG.CLOUDINARY_CONFIG.cloudName}/image/upload`,
+      {
+        method: 'POST',
+        body: formData
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Cloudinary API Error:', errorText);
+      throw new Error(`Cloudinary upload failed: ${response.status} ${errorText}`);
+    }
+
+    const data = await response.json();
+    if (data.error) {
+      console.error('Cloudinary Error Response:', data.error);
+      throw new Error(data.error.message || 'Cloudinary upload error');
+    }
+
+    let stableUrl = data.secure_url;
+    if (stableUrl.includes('/v')) {
+      stableUrl = stableUrl.replace(/\/v\d+\//, '/');
+    }
+
+    return stableUrl;
+
+  } catch (error) {
+    console.error('Cloudinary upload error:', error);
+    throw error;
+  }
+}
+
 async function saveImagesToFirebase() {
   const db = window.firebaseDB;
   if (!db || !currentUser) return;
@@ -172,7 +233,7 @@ async function saveImagesToFirebase() {
     const toSave = await Promise.all(savedImages.map(async img => {
       let base64 = '';
 
-      if (img.blob) {
+      if (img.blob && !img.cloudinaryUrl) {
         const compressedBlob = await compressImage(img.blob, 0.7, 1024, 1024);
         base64 = await new Promise((resolve, reject) => {
           const reader = new FileReader();
@@ -185,6 +246,7 @@ async function saveImagesToFirebase() {
       return {
         url: img.url || '',
         storageUrl: img.storageUrl || '',
+        cloudinaryUrl: img.cloudinaryUrl || '',
         base64: base64,
         prompt: img.prompt || '',
         ts: img.ts || Date.now()
@@ -280,15 +342,27 @@ async function saveMyImage(url, prompt, providedBlob = null) {
   try {
     let blobUrl = url;
     let storageBlob = providedBlob;
+    let cloudinaryUrl = null;
 
     if (providedBlob) {
       blobUrl = URL.createObjectURL(providedBlob);
+      try {
+        cloudinaryUrl = await uploadToCloudinary(providedBlob, `generated_${Date.now()}`);
+      } catch (cloudinaryError) {
+        console.error('Failed to upload to Cloudinary, falling back to local storage:', cloudinaryError);
+      }
     } else if (url.startsWith('blob:')) {
       try {
         blobUrl = url;
         const response = await fetch(url);
         storageBlob = await response.blob();
+        try {
+          cloudinaryUrl = await uploadToCloudinary(storageBlob, `generated_${Date.now()}`);
+        } catch (cloudinaryError) {
+          console.error('Failed to upload to Cloudinary, falling back to local storage:', cloudinaryError);
+        }
       } catch (blobError) {
+        console.error('Failed to process blob URL:', blobError);
       }
     } else if (url.startsWith('http') || url.startsWith('/')) {
       const fetchUrl = url.startsWith('/') ? CONFIG.BASE + url : url;
@@ -301,24 +375,32 @@ async function saveMyImage(url, prompt, providedBlob = null) {
         if (response.ok) {
           storageBlob = await response.blob();
           blobUrl = URL.createObjectURL(storageBlob);
+          try {
+            cloudinaryUrl = await uploadToCloudinary(storageBlob, `generated_${Date.now()}`);
+          } catch (cloudinaryError) {
+            console.error('Failed to upload to Cloudinary, falling back to local storage:', cloudinaryError);
+          }
         }
       } catch (fetchError) {
+        console.error('Failed to fetch image:', fetchError);
       }
     }
 
     const image = {
-      url: blobUrl,
-      storageUrl: blobUrl,
+      url: cloudinaryUrl || blobUrl,
+      storageUrl: cloudinaryUrl || blobUrl,
       originalUrl: url,
       blob: storageBlob,
       prompt,
-      ts: Date.now()
+      ts: Date.now(),
+      cloudinaryUrl: cloudinaryUrl
     };
 
     const isDuplicate = savedImages.some(existingImg =>
       existingImg.originalUrl === url ||
-      existingImg.storageUrl === blobUrl ||
-      existingImg.url === blobUrl
+      existingImg.storageUrl === (cloudinaryUrl || blobUrl) ||
+      existingImg.url === (cloudinaryUrl || blobUrl) ||
+      (cloudinaryUrl && existingImg.cloudinaryUrl === cloudinaryUrl)
     );
 
     if (!isDuplicate) {
@@ -329,6 +411,7 @@ async function saveMyImage(url, prompt, providedBlob = null) {
     return;
 
   } catch (error) {
+    console.error('Error in saveMyImage:', error);
   }
 
   const image = {
@@ -337,7 +420,8 @@ async function saveMyImage(url, prompt, providedBlob = null) {
     originalUrl: url,
     blob: null,
     prompt,
-    ts: Date.now()
+    ts: Date.now(),
+    cloudinaryUrl: null
   };
 
   const isDuplicate = savedImages.some(existingImg =>
@@ -356,17 +440,6 @@ async function saveMyImage(url, prompt, providedBlob = null) {
 async function generateImage(prompt, retryCount = 0) {
   const maxRetries = 3;
   const baseDelay = 1000;
-
-  const area = document.getElementById('imageOutputArea');
-
-  area.innerHTML = `
-  <div class="image-output-inner">
-    <div class="image-output-loading">
-      <div class="dots"><span></span><span></span><span></span></div>
-      <span>Generating image${retryCount > 0 ? ` (retry ${retryCount}/${maxRetries})` : ''}...</span>
-    </div>
-  </div>`;
-  area.classList.remove('hidden');
 
   try {
     const res = await fetch(`${CONFIG.BASE}/image`, {
@@ -417,19 +490,7 @@ async function generateImage(prompt, retryCount = 0) {
       console.error('Failed to fetch image from proxy:', error);
     }
 
-    area.innerHTML = `
-    <div class="image-output-inner">
-      <div class="image-output-result">
-        <img src="${displayUrl}" alt="${prompt}" style="cursor:pointer">
-      </div>
-      <div class="image-output-footer">
-        <span class="image-output-prompt">${prompt}</span>
-        <button id="imgOutputClose">×</button>
-      </div>
-    </div>`;
-
-    document.getElementById('imgOutputClose').onclick = closeImageOutput;
-    area.querySelector('img').onclick = () => openLightbox(displayUrl);
+    await sendImagePrompt(prompt);
 
     saveMyImage(displayUrl, prompt, imageBlob);
   } catch (err) {
@@ -446,12 +507,14 @@ async function generateImage(prompt, retryCount = 0) {
       : err.message.includes('502')
         ? 'Image generation service temporarily unavailable. The service may be experiencing high demand. Please try again later.'
         : err.message;
-    area.innerHTML = `<div class="image-output-inner error">${errorMsg}</div>`;
-  }
-}
 
-function closeImageOutput() {
-  document.getElementById('imageOutputArea')?.classList.add('hidden');
+    const inp = document.getElementById('inp');
+    if (inp) {
+      inp.value = prompt;
+      addBubbleWithThinking('user', prompt);
+      addBubble('assistant', errorMsg);
+    }
+  }
 }
 
 async function deleteImage(index) {
@@ -461,24 +524,36 @@ async function deleteImage(index) {
     savedImages.splice(index, 1);
     renderMyImages();
     await saveImagesToFirebase();
-    showToast('Image deleted', 'success');
+    toast.success('Image deleted');
   } catch (error) {
     console.error('Error deleting image:', error);
-    showToast('Failed to delete image', 'error');
+    toast.error('Failed to delete image');
   }
 }
 
 async function deleteAllImages() {
-  if (!confirm('Are you sure you want to delete all your images? This action cannot be undone.')) return;
+  let confirmed;
+
+  const result = confirm('Are you sure you want to delete all your images? This action cannot be undone.');
+
+  if (result instanceof Promise) {
+    confirmed = await result;
+  } else {
+    confirmed = result;
+  }
+
+  if (!confirmed) {
+    return;
+  }
 
   try {
     savedImages = [];
     renderMyImages();
     await saveImagesToFirebase();
-    showToast('All images deleted', 'success');
+    toast.success('All images deleted');
   } catch (error) {
     console.error('Error deleting all images:', error);
-    showToast('Failed to delete images', 'error');
+    toast.error('Failed to delete images');
   }
 }
 
