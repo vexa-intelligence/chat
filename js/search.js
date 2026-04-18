@@ -1,14 +1,5 @@
 const CYRON_BASE = 'https://cyron.pages.dev';
 
-async function getFavicon(url) {
-    try {
-        const domain = new URL(url).hostname.replace('www.', '').replace(/\/+$/, '');
-        return `https://favicon.vemetric.com/${domain}`;
-    } catch {
-        return null;
-    }
-}
-
 const VISIT_PROXIES = [
     {
         name: 'allorigins',
@@ -81,9 +72,7 @@ async function cyronSearch(query) {
 }
 
 function buildSearchContext(query, data) {
-    if (!data || !data.results || !data.results.all || !data.results.all.length) {
-        return null;
-    }
+    if (!data || !data.results || !data.results.all || !data.results.all.length) return null;
     const results = data.results.all.slice(0, 5);
     let ctx = 'Web search results for: "' + query + '"\n\n';
     results.forEach((r, i) => {
@@ -92,12 +81,8 @@ function buildSearchContext(query, data) {
         if (r.content) ctx += r.content.slice(0, 300) + '\n';
         ctx += '\n';
     });
-    if (data.answers && data.answers.length) {
-        ctx += 'Direct answer: ' + data.answers[0] + '\n\n';
-    }
-    if (data.infobox && data.infobox.content) {
-        ctx += 'Info: ' + data.infobox.content.slice(0, 400) + '\n\n';
-    }
+    if (data.answers && data.answers.length) ctx += 'Direct answer: ' + data.answers[0] + '\n\n';
+    if (data.infobox && data.infobox.content) ctx += 'Info: ' + data.infobox.content.slice(0, 400) + '\n\n';
     ctx += "Use the search results above to answer the user's question. Do NOT output any HTML. Do not include source links or citations in your response.";
     return ctx;
 }
@@ -109,7 +94,7 @@ function addSearchStatusBubble() {
     row.id = 'searchStatusRow';
     const bub = document.createElement('div');
     bub.className = 'bot-bub search-status-bub';
-    bub.innerHTML = '<i class="fa-solid fa-globe" style="font-size:12px;margin-right:6px;color:var(--accent);"></i><span class="search-status-text">Searching the web\u2026</span>';
+    bub.innerHTML = '<i class="fa-solid fa-globe" style="font-size:12px;margin-right:6px;color:var(--accent);"></i><span class="search-status-text">Searching the web…</span>';
     row.appendChild(bub);
     feed.appendChild(row);
     return row;
@@ -122,42 +107,6 @@ function removeSearchStatusBubble() {
 function updateSearchStatus(text) {
     const el = document.querySelector('.search-status-text');
     if (el) el.textContent = text;
-}
-
-async function addSearchSourcesBar(results) {
-    if (!results || !results.length) return;
-    const feed = document.getElementById('feed');
-    const bar = document.createElement('div');
-    bar.className = 'msg-row bot';
-    const bub = document.createElement('div');
-    bub.className = 'bot-bub search-sources-bub';
-    const sourcesRow = document.createElement('div');
-    sourcesRow.className = 'search-sources-row';
-    const label = document.createElement('span');
-    label.className = 'search-sources-label';
-    label.innerHTML = '<i class="fa-solid fa-globe" style="font-size:11px;margin-right:4px;color:var(--accent)"></i>Sources';
-    sourcesRow.appendChild(label);
-    results.slice(0, 4).forEach(r => {
-        let domain = '';
-        try { domain = new URL(r.url).hostname.replace('www.', ''); } catch { domain = r.url; }
-        const favicon = `https://favicon.vemetric.com/${domain}`;
-        const chip = document.createElement('a');
-        chip.href = escHtml(r.url);
-        chip.target = '_blank';
-        chip.rel = 'noopener noreferrer';
-        chip.className = 'search-source-chip';
-        const img = document.createElement('img');
-        img.src = favicon;
-        img.className = 'search-source-favicon';
-        img.alt = '';
-        img.onerror = function () { this.style.display = 'none'; };
-        chip.appendChild(img);
-        chip.appendChild(document.createTextNode(' ' + domain));
-        sourcesRow.appendChild(chip);
-    });
-    bub.appendChild(sourcesRow);
-    bar.appendChild(bub);
-    feed.appendChild(bar);
 }
 
 const VISIT_INTENT_RE = /\b(visit|go to|open|browse|read|check out|look at|fetch|load|scrape|summarize|analyze|what(?:'s| is) (?:on|at)|content of|tell me about|show me)\b/i;
@@ -191,14 +140,12 @@ function parseHtmlToText(html) {
 async function fetchPageText(url) {
     let lastErr;
     for (const proxy of VISIT_PROXIES) {
-        updateVisitStatus('Fetching via ' + proxy.name + '\u2026');
+        updateVisitStatus('Fetching via ' + proxy.name + '…');
         try {
             const html = await proxy.fetch(url);
             if (html && html.length > 50) {
                 const result = parseHtmlToText(html);
-                if (result.text.length > 10) {
-                    return result;
-                }
+                if (result.text.length > 10) return result;
             }
         } catch (err) {
             lastErr = err;
@@ -222,7 +169,7 @@ function addVisitStatusBubble() {
     row.id = 'visitStatusRow';
     const bub = document.createElement('div');
     bub.className = 'bot-bub search-status-bub';
-    bub.innerHTML = '<i class="fa-solid fa-earth-americas" style="font-size:12px;margin-right:6px;color:var(--accent);"></i><span id="visitStatusText">Visiting website\u2026</span>';
+    bub.innerHTML = '<i class="fa-solid fa-earth-americas" style="font-size:12px;margin-right:6px;color:var(--accent);"></i><span id="visitStatusText">Visiting website…</span>';
     row.appendChild(bub);
     feed.appendChild(row);
     return row;
@@ -237,40 +184,6 @@ function updateVisitStatus(text) {
     if (el) el.textContent = text;
 }
 
-async function addVisitedBar(url, title) {
-    const feed = document.getElementById('feed');
-    const bar = document.createElement('div');
-    bar.className = 'msg-row bot';
-    const bub = document.createElement('div');
-    bub.className = 'bot-bub search-sources-bub';
-    const sourcesRow = document.createElement('div');
-    sourcesRow.className = 'search-sources-row';
-    const label = document.createElement('span');
-    label.className = 'search-sources-label';
-    label.innerHTML = '<i class="fa-solid fa-earth-americas" style="font-size:11px;margin-right:4px;color:var(--accent)"></i>Visited';
-    sourcesRow.appendChild(label);
-    let domain = '';
-    try { domain = new URL(url).hostname.replace('www.', ''); } catch { domain = url; }
-    const displayTitle = title ? title.slice(0, 50) : domain;
-    const favicon = `https://favicon.vemetric.com/${domain}`;
-    const chip = document.createElement('a');
-    chip.href = escHtml(url);
-    chip.target = '_blank';
-    chip.rel = 'noopener noreferrer';
-    chip.className = 'search-source-chip';
-    const img = document.createElement('img');
-    img.src = favicon;
-    img.className = 'search-source-favicon';
-    img.alt = '';
-    img.onerror = function () { this.style.display = 'none'; };
-    chip.appendChild(img);
-    chip.appendChild(document.createTextNode(' ' + escHtml(displayTitle)));
-    sourcesRow.appendChild(chip);
-    bub.appendChild(sourcesRow);
-    bar.appendChild(bub);
-    feed.appendChild(bar);
-}
-
 async function tryGetVisitContext(userMessage) {
     const url = detectVisitUrl(userMessage);
     if (!url) return null;
@@ -281,9 +194,8 @@ async function tryGetVisitContext(userMessage) {
         updateVisitStatus('Page loaded');
         await new Promise(r => setTimeout(r, 350));
         removeVisitStatusBubble();
-        const ctx = buildVisitContext(url, title, text);
-        return ctx;
-    } catch (err) {
+        return buildVisitContext(url, title, text);
+    } catch {
         updateVisitStatus('Could not load page');
         await new Promise(r => setTimeout(r, 500));
         removeVisitStatusBubble();
@@ -302,17 +214,10 @@ async function sendChatTextWithSearch(userMessage, loading, session) {
             { role: 'user', content: visitContext + '\n\nUser question: ' + userMessage }
         ];
 
-        const res = await fetch(CONFIG.BASE + '/chat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ model: currentModel || 'vexa', messages })
-        });
+        const res = await fetchChat(messages, currentModel || 'vexa', currentAbortController?.signal);
+        let reply = await readSSEStream(res, currentAbortController?.signal);
+        if (!reply) throw new Error('Empty response');
 
-        if (!res.ok) throw new Error('HTTP ' + res.status + ': ' + await res.text());
-        const raw = await res.json();
-        if (!raw.success) throw new Error(raw.error || 'API returned success: false');
-
-        let reply = String(extractText(raw)).trim();
         let think = null;
         const m = reply.match(/<think>([\s\S]*?)<\/think>/i);
         if (m) { think = m[1].trim(); reply = reply.replace(/<think>[\s\S]*?<\/think>/gi, '').trim(); }
@@ -342,23 +247,12 @@ async function sendChatTextWithSearch(userMessage, loading, session) {
 
         if (researchPatterns.some(p => p.test(userMessage)) && lastUserMessage) {
             try {
-                const queryRes = await fetch(CONFIG.BASE + '/chat', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        model: currentModel || 'vexa',
-                        messages: [
-                            { role: 'system', content: 'Generate a concise search query (3-8 words) based on the user\'s topic. Only output the search query, nothing else.' },
-                            { role: 'user', content: 'Topic: ' + lastUserMessage.slice(0, 200) }
-                        ]
-                    })
-                });
-                if (queryRes.ok) {
-                    const queryData = await queryRes.json();
-                    if (queryData.success) {
-                        const generated = String(extractText(queryData)).trim().replace(/^["']|["']$/g, '');
-                        if (generated && generated.length > 2) searchQuery = generated;
-                    }
+                const generated = await fetchQuery(
+                    'Generate a concise search query (3-8 words) based on this topic. Only output the search query, nothing else. Topic: ' + lastUserMessage.slice(0, 200),
+                    currentModel || 'vexa'
+                );
+                if (generated && generated.trim().length > 2) {
+                    searchQuery = generated.trim().replace(/^["']|["']$/g, '');
                 }
             } catch { }
         }
@@ -368,7 +262,7 @@ async function sendChatTextWithSearch(userMessage, loading, session) {
         searchContext = buildSearchContext(searchQuery, data);
         updateSearchStatus('Search complete');
     } catch {
-        updateSearchStatus('Search failed, using AI knowledge\u2026');
+        updateSearchStatus('Search failed, using AI knowledge…');
     }
 
     await new Promise(r => setTimeout(r, 350));
@@ -381,17 +275,10 @@ async function sendChatTextWithSearch(userMessage, loading, session) {
         { role: 'user', content: searchContext ? searchContext + '\n\nUser question: ' + userMessage : userMessage }
     ];
 
-    const res = await fetch(CONFIG.BASE + '/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: currentModel || 'vexa', messages })
-    });
+    const res = await fetchChat(messages, currentModel || 'vexa', currentAbortController?.signal);
+    let reply = await readSSEStream(res, currentAbortController?.signal);
+    if (!reply) throw new Error('Empty response');
 
-    if (!res.ok) throw new Error('HTTP ' + res.status + ': ' + await res.text());
-    const raw = await res.json();
-    if (!raw.success) throw new Error(raw.error || 'API returned success: false');
-
-    let reply = String(extractText(raw)).trim();
     let think = null;
     const m = reply.match(/<think>([\s\S]*?)<\/think>/i);
     if (m) { think = m[1].trim(); reply = reply.replace(/<think>[\s\S]*?<\/think>/gi, '').trim(); }
@@ -434,7 +321,6 @@ async function sendChatTextWithSearch(userMessage, loading, session) {
     }
 
     return reply;
-
 }
 
 function initSearchMode() {
@@ -451,8 +337,7 @@ function initSearchMode() {
         busy = true;
         showPageRaw('chat');
         document.querySelector('.chat-wrap')?.classList.remove('empty-chat');
-        const feedEmpty = document.getElementById('feedEmpty');
-        if (feedEmpty) feedEmpty.remove();
+        document.getElementById('feedEmpty')?.remove();
 
         if (!currentUser) {
             const feed = document.getElementById('feed');
@@ -492,7 +377,7 @@ function initSearchMode() {
 
         const msgIndex = session.messages.length;
         session.messages.push({ role: 'user', content: text });
-        addBubbleWithThinking('user', text, msgIndex);
+        addBubble('user', text, msgIndex);
         const loading = addLoading();
 
         let aiReply = null;
@@ -504,13 +389,13 @@ function initSearchMode() {
             if (err.name === 'AbortError' || err.message?.includes('aborted')) {
                 swapText(loading, 'Chat stopped');
             } else {
-                swapText(loading, 'Error - ' + (err.message || 'try again.'));
+                swapText(loading, 'Error — ' + (err.message || 'try again.'));
             }
         }
 
         if (aiReply) {
             session.messages.push({ role: 'assistant', content: aiReply });
-            const s = getVexaSettings ? getVexaSettings() : {};
+            const s = typeof getVexaSettings === 'function' ? getVexaSettings() : {};
             if (s.autoTitle !== false && session.messages.filter(m => m.role === 'user').length === 1) {
                 const aiTitle = await generateChatTitle(text, typeof aiReply === 'string' ? aiReply : '');
                 if (aiTitle) {
