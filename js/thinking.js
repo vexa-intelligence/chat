@@ -1,6 +1,9 @@
 const THINKING_STEPS_MAX = 8;
 const RESEARCH_SOURCES_COUNT = 6;
 
+let thinkingModeEnabled = false;
+let deepResearchEnabled = false;
+
 async function getFavicon(url) {
     try {
         const domain = new URL(url).hostname.replace('www.', '').replace(/\/+$/, '');
@@ -18,7 +21,7 @@ You are an advanced reasoning assistant. When you think through a problem, wrap 
 
 IMPORTANT: Always start your response with <think> tags containing your step-by-step reasoning process. Format your thinking as follows:
 - Start with "So the user said..." followed by a brief restatement of their question
-- Then explain your reasoning process with multiple points (reason, reason, reason)
+- Then explain your reasoning process with multiple points
 - End with your conclusion or approach
 Then close with </think> tags, then provide your final answer.`;
 
@@ -31,46 +34,26 @@ Then close with </think> tags, then provide your final answer.`;
     const loadingBub = loading.querySelector('.bot-bub');
     loadingBub.innerHTML = `<span class="thinking-inline"><span class="thinking-dot"></span>Thinking…</span>`;
 
-    const res = await fetch(`${CONFIG.BASE}/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: currentModel || 'vexa', messages })
-    });
+    const res = await fetchChat(messages, currentModel || 'vexa', currentAbortController?.signal);
+    const reply = await readSSEStream(res, currentAbortController?.signal);
 
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const raw = await res.json();
-    if (!raw.success) throw new Error(raw.error || 'API error');
+    if (!reply) throw new Error('Empty response');
 
-    let reply = String(extractText(raw)).trim();
+    let text = reply;
     let think = null;
 
-    const m = reply.match(/<think>([\s\S]*?)<\/think>/i);
+    const m = text.match(/<think>([\s\S]*?)<\/think>/i);
     if (m) {
         think = m[1].trim();
-        reply = reply.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+        text = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
     } else {
-
         try {
-            const thinkRes = await fetch(`${CONFIG.BASE}/chat`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    model: currentModel || 'vexa',
-                    messages: [
-                        { role: 'system', content: 'You are a reasoning assistant. Provide step-by-step thinking for this question. Format your thinking as: "So the user said..." followed by your reasoning points, then your conclusion. Be analytical and break down the problem. Output 3-5 sentences showing your thought process.' },
-                        { role: 'user', content: userMessage }
-                    ]
-                })
-            });
-
-            if (thinkRes.ok) {
-                const thinkRaw = await thinkRes.json();
-                if (thinkRaw.success) {
-                    think = String(extractText(thinkRaw)).trim();
-                }
-            }
-        } catch (err) {
-        }
+            const thinkText = await fetchQuery(
+                `Provide step-by-step thinking for this question. Format: "So the user said..." followed by reasoning points, then conclusion. Be analytical, 3-5 sentences. Question: ${userMessage}`,
+                currentModel || 'vexa'
+            );
+            if (thinkText) think = thinkText;
+        } catch { }
 
         if (!think) {
             think = `So the user said "${userMessage}". I need to understand what they're asking and provide a helpful response based on the context.`;
@@ -78,43 +61,9 @@ Then close with </think> tags, then provide your final answer.`;
     }
 
     await new Promise(r => setTimeout(r, 200));
+    await typewriterSwapWithThinking(loading, text, think);
 
-    await typewriterSwapWithThinking(loading, reply, think);
-
-    if (think) {
-        return {
-            content: reply,
-            thinking: think
-        };
-    }
-
-    return reply;
-}
-
-async function animateThinkingSteps(thinkText, loading) {
-    const stepsContainer = loading.querySelector('#thinkingLiveSteps');
-    if (!stepsContainer) return;
-
-    const sentences = thinkText.match(/[^.!?\n]+[.!?\n]+/g) || [thinkText];
-    const steps = sentences.slice(0, THINKING_STEPS_MAX);
-
-    for (let i = 0; i < steps.length; i++) {
-        const step = steps[i].trim();
-        if (!step) continue;
-
-        const stepEl = document.createElement('div');
-        stepEl.className = 'thinking-live-step';
-        stepEl.textContent = step;
-        stepsContainer.appendChild(stepEl);
-
-        await new Promise(r => setTimeout(r, 120 + Math.random() * 80));
-        stepEl.classList.add('visible');
-
-        stepsContainer.scrollTop = stepsContainer.scrollHeight;
-        await new Promise(r => setTimeout(r, 180 + step.length * 4));
-    }
-
-    await new Promise(r => setTimeout(r, 300));
+    return think ? { content: text, thinking: think } : text;
 }
 
 async function typewriterSwapWithThinking(row, text, think) {
@@ -122,35 +71,8 @@ async function typewriterSwapWithThinking(row, text, think) {
     bub.innerHTML = '';
 
     if (think) {
-        const block = document.createElement('div');
-        block.className = 'think-block';
-        block.innerHTML = `
-            <button class="think-toggle-btn">
-                <div class="think-toggle-left">
-                    <svg viewBox="0 0 24 24" fill="currentColor" class="think-sparkle-icon"><path d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5L12 2Z"/></svg>
-                    <span class="think-toggle-label">Thought for a moment</span>
-                </div>
-                <div class="think-toggle-right">
-                    <span class="think-show-hide">Hide thinking</span>
-                    <svg class="think-chevron open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-                </div>
-            </button>
-            <div class="think-content open">
-                <div class="think-content-inner"></div>
-            </div>`;
-        let open = true;
-        const btn = block.querySelector('.think-toggle-btn');
-        const content = block.querySelector('.think-content');
-        const label = block.querySelector('.think-show-hide');
-        const chevron = block.querySelector('.think-chevron');
-        btn.addEventListener('click', () => {
-            open = !open;
-            content.classList.toggle('open', open);
-            chevron.classList.toggle('open', open);
-            label.textContent = open ? 'Hide thinking' : 'Show thinking';
-        });
+        const block = buildThinkBlock(null, true);
         bub.appendChild(block);
-
         const thinkInner = block.querySelector('.think-content-inner');
         let thinkRendered = '';
         for (let i = 0; i < think.length; i++) {
@@ -167,7 +89,6 @@ async function typewriterSwapWithThinking(row, text, think) {
 
     const tokens = tokenize(text);
     let rendered = '';
-
     for (let i = 0; i < tokens.length; i++) {
         rendered += tokens[i];
         textEl.innerHTML = fmt(rendered);
@@ -197,23 +118,13 @@ async function sendDeepResearch(userMessage, loading, session) {
     let steps = [];
 
     try {
-        const stepsRes = await fetch(`${CONFIG.BASE}/chat`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                model: currentModel || 'vexa',
-                messages: [
-                    { role: 'system', content: 'You generate short research step descriptions. Return ONLY a JSON array of 4-5 strings, each under 8 words, describing the steps to research this question. No markdown, no explanation, just the raw JSON array.' },
-                    { role: 'user', content: userMessage }
-                ]
-            })
-        });
-        if (stepsRes.ok) {
-            const stepsRaw = await stepsRes.json();
-            const stepsText = String(extractText(stepsRaw)).trim().replace(/```json|```/g, '').trim();
-            const parsed = JSON.parse(stepsText);
-            if (Array.isArray(parsed) && parsed.length) steps = parsed;
-        }
+        const stepsText = await fetchQuery(
+            `Generate a JSON array of 4-5 short research step descriptions (under 8 words each) for researching this question. Return ONLY the raw JSON array, no markdown. Question: ${userMessage}`,
+            currentModel || 'vexa'
+        );
+        const cleaned = stepsText.replace(/```json|```/g, '').trim();
+        const parsed = JSON.parse(cleaned);
+        if (Array.isArray(parsed) && parsed.length) steps = parsed;
     } catch { }
 
     const stepsEl = bub.querySelector('#drSteps');
@@ -246,21 +157,17 @@ async function sendDeepResearch(userMessage, loading, session) {
             const chipsPromises = searchResults.slice(0, 4).map(async r => {
                 let domain = r.url;
                 try { domain = new URL(r.url).hostname.replace('www.', ''); } catch { }
-
                 const favicon = await getFavicon(r.url);
                 const faviconHtml = favicon ? `<img src="${escHtml(favicon)}" class="search-source-favicon" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline-block';">` : '';
                 const fallbackIcon = `<i class="fa-solid fa-link" style="font-size:9px;${favicon ? 'display:none;' : ''}"></i>`;
-
                 const chip = document.createElement('a');
                 chip.href = r.url;
                 chip.target = '_blank';
                 chip.rel = 'noopener noreferrer';
                 chip.className = 'dr-source-chip';
                 chip.innerHTML = `${faviconHtml}${fallbackIcon} ${escHtml(domain)}`;
-
                 return chip;
             });
-
             const chips = await Promise.all(chipsPromises);
             chips.forEach(chip => sourcesEl.appendChild(chip));
         }
@@ -285,27 +192,15 @@ async function sendDeepResearch(userMessage, loading, session) {
     const messages = [
         { role: 'system', content: researchSystem },
         ...history,
-        {
-            role: 'user',
-            content: searchContext
-                ? `${searchContext}\n\nUser question: ${userMessage}`
-                : userMessage
-        }
+        { role: 'user', content: searchContext ? `${searchContext}\n\nUser question: ${userMessage}` : userMessage }
     ];
 
-    const res = await fetch(`${CONFIG.BASE}/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: currentModel || 'vexa', messages })
-    });
+    const res = await fetchChat(messages, currentModel || 'vexa', currentAbortController?.signal);
+    let reply = await readSSEStream(res, currentAbortController?.signal);
 
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const raw = await res.json();
-    if (!raw.success) throw new Error(raw.error || 'API error');
+    if (!reply) throw new Error('Empty response');
 
-    let reply = String(extractText(raw)).trim();
-    const m = reply.match(/<think>([\s\S]*?)<\/think>/i);
-    if (m) reply = reply.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+    reply = reply.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
 
     const finalBub = loading.querySelector('.bot-bub');
     finalBub.innerHTML = '';
@@ -336,30 +231,29 @@ async function sendDeepResearch(userMessage, loading, session) {
             sourceBar.appendChild(chip);
         });
         finalBub.appendChild(sourceBar);
-
-        const textEl = document.createElement('div');
-        textEl.className = 'bot-bub-content';
-        finalBub.appendChild(textEl);
-
-        const tokens = tokenize(reply);
-        let rendered = '';
-        for (let i = 0; i < tokens.length; i++) {
-            rendered += tokens[i];
-            textEl.innerHTML = fmt(rendered);
-            await sleep(tokens[i].length > 3 ? 4 : 12);
-        }
-        textEl.innerHTML = fmt(rendered);
-        attachCodeCopyListeners(loading);
-
-        const actionsEl = document.createElement('div');
-        actionsEl.className = 'msg-actions';
-        actionsEl.innerHTML = '<button class="copy-text-btn" title="Copy"><i class="fa-regular fa-copy"></i> Copy</button>';
-        finalBub.appendChild(actionsEl);
-        attachCopyText(loading, () => reply);
-
-
-        return reply;
     }
+
+    const textEl = document.createElement('div');
+    textEl.className = 'bot-bub-content';
+    finalBub.appendChild(textEl);
+
+    const tokens = tokenize(reply);
+    let rendered = '';
+    for (let i = 0; i < tokens.length; i++) {
+        rendered += tokens[i];
+        textEl.innerHTML = fmt(rendered);
+        await sleep(tokens[i].length > 3 ? 4 : 12);
+    }
+    textEl.innerHTML = fmt(rendered);
+    attachCodeCopyListeners(loading);
+
+    const actionsEl = document.createElement('div');
+    actionsEl.className = 'msg-actions';
+    actionsEl.innerHTML = '<button class="copy-text-btn" title="Copy"><i class="fa-regular fa-copy"></i> Copy</button>';
+    finalBub.appendChild(actionsEl);
+    attachCopyText(loading, () => reply);
+
+    return reply;
 }
 
 async function sendChatWithVisionImages(text, images, loading, session) {
@@ -369,14 +263,7 @@ async function sendChatWithVisionImages(text, images, loading, session) {
         if (imageUrl.startsWith('data:')) {
             const match = imageUrl.match(/^data:([^;]+);base64,(.+)$/);
             if (match) {
-                return {
-                    type: 'image',
-                    source: {
-                        type: 'base64',
-                        media_type: match[1],
-                        data: match[2]
-                    }
-                };
+                return { type: 'image', source: { type: 'base64', media_type: match[1], data: match[2] } };
             }
         }
         return { type: 'image_url', image_url: { url: imageUrl } };
@@ -393,36 +280,18 @@ async function sendChatWithVisionImages(text, images, loading, session) {
         { role: 'user', content: userContent }
     ];
 
-    const res = await fetch(`${CONFIG.BASE}/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            model: currentModel || 'vexa',
-            messages,
-            vision: true,
-            images: images
-        })
-    });
+    const res = await fetchChat(messages, currentModel || 'vexa', currentAbortController?.signal);
+    let reply = await readSSEStream(res, currentAbortController?.signal);
 
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const raw = await res.json();
-    if (!raw.success) throw new Error(raw.error || 'API error');
+    if (!reply) throw new Error('Empty response');
 
-    let reply = String(extractText(raw)).trim();
     let think = null;
     const m = reply.match(/<think>([\s\S]*?)<\/think>/i);
     if (m) { think = m[1].trim(); reply = reply.replace(/<think>[\s\S]*?<\/think>/gi, '').trim(); }
 
     await typewriterSwapWithThinking(loading, reply, think);
 
-    if (think) {
-        return {
-            content: reply,
-            thinking: think
-        };
-    }
-
-    return reply;
+    return think ? { content: reply, thinking: think } : reply;
 }
 
 window.sendChatTextWithThinking = sendChatTextWithThinking;
