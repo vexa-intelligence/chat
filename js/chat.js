@@ -11,10 +11,6 @@ const IMG_RE = /\b(generate|create|draw|make|paint|render|produce|design|imagine
 
 function isImg(t) { return IMG_RE.test(t); }
 
-function isStreamingEnabled() {
-    const settings = typeof getVexaSettings === 'function' ? getVexaSettings() : {};
-    return settings.streaming !== false;
-}
 
 function cleanImgPrompt(t) {
     return t.replace(/['"]/g, '')
@@ -348,7 +344,7 @@ async function fetchQuery(prompt, model) {
     const res = await fetch(`${CONFIG.BASE}/query`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, model: model || currentModel || 'vexa' })
+        body: JSON.stringify({ q: prompt, model: model || currentModel || 'vexa' })
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
@@ -365,14 +361,6 @@ function scrollBottom() {
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-async function typewriterTitle(element, text) {
-    element.textContent = '';
-    const chars = text.split('');
-    for (let i = 0; i < chars.length; i++) {
-        element.textContent += chars[i];
-        await sleep(10 + Math.random() * 10);
-    }
-}
 
 function attachCopyText(row, getText) {
     const btn = row.querySelector('.copy-text-btn');
@@ -628,6 +616,64 @@ function addLoading() {
     return row;
 }
 
+function swapTextWithThinking(row, text, think) {
+    const bub = row.querySelector('.bot-bub');
+    bub.innerHTML = '';
+
+    if (think) {
+        const block = buildThinkBlock(null, true);
+        bub.appendChild(block);
+        const thinkInner = block.querySelector('.think-content-inner');
+        thinkInner.textContent = think;
+    }
+
+    const contentDiv = document.createElement('div');
+    contentDiv.className = 'bot-bub-content';
+    contentDiv.innerHTML = fmt(text);
+    bub.appendChild(contentDiv);
+
+    const actionsEl = document.createElement('div');
+    actionsEl.className = 'msg-actions';
+    actionsEl.innerHTML = '<button class="copy-text-btn" title="Copy message"><i class="fa-regular fa-copy"></i> Copy</button>';
+    bub.appendChild(actionsEl);
+    attachCopyText(row, () => text);
+    attachCodeCopyListeners(row);
+}
+
+function swapTextWithThinkingAndResearch(row, text, searchResults) {
+    const bub = row.querySelector('.bot-bub');
+
+    if (searchResults && searchResults.length) {
+        const sourceBar = document.createElement('div');
+        sourceBar.className = 'dr-final-sources';
+        sourceBar.innerHTML = `<span class="dr-final-sources-label"><i class="fa-solid fa-globe" style="font-size:11px;margin-right:5px;color:var(--accent)"></i>Sources</span>`;
+        searchResults.slice(0, 4).forEach(r => {
+            let domain = r.url;
+            try { domain = new URL(r.url).hostname.replace('www.', ''); } catch { }
+            const chip = document.createElement('a');
+            chip.href = r.url;
+            chip.target = '_blank';
+            chip.rel = 'noopener noreferrer';
+            chip.className = 'search-source-chip';
+            chip.innerHTML = `<i class="fa-solid fa-link" style="font-size:10px"></i> ${escHtml(domain)}`;
+            sourceBar.appendChild(chip);
+        });
+        bub.appendChild(sourceBar);
+    }
+
+    const textEl = document.createElement('div');
+    textEl.className = 'bot-bub-content';
+    textEl.innerHTML = fmt(text);
+    bub.appendChild(textEl);
+
+    const actionsEl = document.createElement('div');
+    actionsEl.className = 'msg-actions';
+    actionsEl.innerHTML = '<button class="copy-text-btn" title="Copy"><i class="fa-regular fa-copy"></i> Copy</button>';
+    bub.appendChild(actionsEl);
+    attachCopyText(row, () => text);
+    attachCodeCopyListeners(row);
+}
+
 function swapText(row, text) {
     const bub = row.querySelector('.bot-bub');
     bub.innerHTML = `<div class="bot-bub-content">${fmt(text)}</div><div class="msg-actions"><button class="copy-text-btn" title="Copy message"><i class="fa-regular fa-copy"></i> Copy</button></div>`;
@@ -675,68 +721,7 @@ function swapImage(row, url, prompt) {
     });
 }
 
-async function typewriterSwap(row, text, think) {
-    const bub = row.querySelector('.bot-bub');
-    bub.innerHTML = '';
 
-    if (think) {
-        const block = buildThinkBlock(null, true);
-        bub.appendChild(block);
-        const thinkInner = block.querySelector('.think-content-inner');
-        let thinkRendered = '';
-        for (let i = 0; i < think.length; i++) {
-            thinkRendered += think[i];
-            thinkInner.textContent = thinkRendered;
-            scrollBottom();
-            await sleep(3);
-        }
-    }
-
-    const textEl = document.createElement('div');
-    textEl.className = 'bot-bub-content';
-    bub.appendChild(textEl);
-
-    const tokens = tokenize(text);
-    let rendered = '';
-    for (let i = 0; i < tokens.length; i++) {
-        rendered += tokens[i];
-        textEl.innerHTML = fmt(rendered);
-        scrollBottom();
-        await sleep(tokens[i].length > 3 ? 5 : 14);
-    }
-
-    textEl.innerHTML = fmt(rendered);
-    attachCodeCopyListeners(row);
-
-    const actionsEl = document.createElement('div');
-    actionsEl.className = 'msg-actions';
-    actionsEl.innerHTML = '<button class="copy-text-btn" title="Copy"><i class="fa-regular fa-copy"></i> Copy</button>';
-    bub.appendChild(actionsEl);
-    attachCopyText(row, () => text);
-}
-
-function tokenize(text) {
-    const chunks = [];
-    let i = 0;
-    while (i < text.length) {
-        if (text[i] === ' ') {
-            let j = i;
-            while (j < text.length && text[j] === ' ') j++;
-            chunks.push(text.slice(i, j));
-            i = j;
-        } else {
-            let j = i;
-            while (j < text.length && text[j] !== ' ') j++;
-            const word = text.slice(i, j);
-            if (word.length > 8) {
-                let k = i;
-                while (k < j) { const end = Math.min(k + 3, j); chunks.push(text.slice(k, end)); k = end; }
-            } else chunks.push(word);
-            i = j;
-        }
-    }
-    return chunks;
-}
 
 async function generateChatTitle(userMessage, aiReply) {
     try {
@@ -945,11 +930,7 @@ async function sendChatText(userMessage, loading, session) {
     const m = text.match(/<think>([\s\S]*?)<\/think>/i);
     if (m) { think = m[1].trim(); text = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim(); }
 
-    if (isStreamingEnabled()) {
-        await typewriterSwap(loading, text, think);
-    } else {
-        swapText(loading, text);
-    }
+    swapText(loading, text);
 
     return text;
 }
@@ -1049,11 +1030,7 @@ async function sendChatWithImages(text, images, loading, session) {
     const m = text2.match(/<think>([\s\S]*?)<\/think>/i);
     if (m) { think = m[1].trim(); text2 = text2.replace(/<think>[\s\S]*?<\/think>/gi, '').trim(); }
 
-    if (isStreamingEnabled()) {
-        await typewriterSwap(loading, text2, think);
-    } else {
-        swapText(loading, text2);
-    }
+    swapText(loading, text2);
 
     return text2;
 }
@@ -1279,7 +1256,7 @@ async function loadSessionIntoChat(session) {
             empty.innerHTML = `<div class="feed-empty-title"></div>`;
             feed.appendChild(empty);
             const titleEl = empty.querySelector('.feed-empty-title');
-            if (title && titleEl) await typewriterTitle(titleEl, title);
+            if (title && titleEl) titleEl.textContent = title;
             return;
         }
 
@@ -1347,7 +1324,7 @@ async function newChat() {
 
     generateEmptyTitle().then(title => {
         const titleEl = document.querySelector('.feed-empty-title');
-        if (titleEl && title) typewriterTitle(titleEl, title);
+        if (titleEl && title) titleEl.textContent = title;
     });
 }
 
@@ -1588,11 +1565,9 @@ window.fetchChat = fetchChat;
 window.fetchQuery = fetchQuery;
 window.readSSEStream = readSSEStream;
 window.streamSSEToElement = streamSSEToElement;
-window.typewriterSwap = typewriterSwap;
 window.swapText = swapText;
 window.swapImage = swapImage;
 window.addLoading = addLoading;
-window.tokenize = tokenize;
 window.fmt = fmt;
 window.escHtml = escHtml;
 window.scrollBottom = scrollBottom;

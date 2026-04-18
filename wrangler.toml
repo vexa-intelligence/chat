@@ -1,0 +1,8 @@
+name = "vexa-ai"
+compatibility_date = "2026-04-16"
+
+[env.production]
+name = "vexa-ai"
+
+[env.preview]
+name = "vexa-ai-preview"

@@ -231,7 +231,7 @@ async function generateAiTheme(prompt) {
         const response = await fetch(CONFIG.BASE + '/query', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ prompt: aiPrompt, model: 'vexa' })
+            body: JSON.stringify({ q: aiPrompt, model: 'vexa' })
         });
 
         const data = await response.json();

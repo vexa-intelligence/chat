@@ -1,9 +1,6 @@
 const THINKING_STEPS_MAX = 8;
 const RESEARCH_SOURCES_COUNT = 6;
 
-let thinkingModeEnabled = false;
-let deepResearchEnabled = false;
-
 async function getFavicon(url) {
     try {
         const domain = new URL(url).hostname.replace('www.', '').replace(/\/+$/, '');
@@ -60,51 +57,11 @@ Then close with </think> tags, then provide your final answer.`;
         }
     }
 
-    await new Promise(r => setTimeout(r, 200));
-    await typewriterSwapWithThinking(loading, text, think);
+    swapTextWithThinking(loading, text, think);
 
     return think ? { content: text, thinking: think } : text;
 }
 
-async function typewriterSwapWithThinking(row, text, think) {
-    const bub = row.querySelector('.bot-bub');
-    bub.innerHTML = '';
-
-    if (think) {
-        const block = buildThinkBlock(null, true);
-        bub.appendChild(block);
-        const thinkInner = block.querySelector('.think-content-inner');
-        let thinkRendered = '';
-        for (let i = 0; i < think.length; i++) {
-            thinkRendered += think[i];
-            thinkInner.textContent = thinkRendered;
-            scrollBottom();
-            await sleep(3);
-        }
-    }
-
-    const textEl = document.createElement('div');
-    textEl.className = 'bot-bub-content';
-    bub.appendChild(textEl);
-
-    const tokens = tokenize(text);
-    let rendered = '';
-    for (let i = 0; i < tokens.length; i++) {
-        rendered += tokens[i];
-        textEl.innerHTML = fmt(rendered);
-        scrollBottom();
-        await sleep(tokens[i].length > 3 ? 5 : 14);
-    }
-
-    textEl.innerHTML = fmt(rendered);
-    attachCodeCopyListeners(row);
-
-    const actionsEl = document.createElement('div');
-    actionsEl.className = 'msg-actions';
-    actionsEl.innerHTML = '<button class="copy-text-btn" title="Copy"><i class="fa-regular fa-copy"></i> Copy</button>';
-    bub.appendChild(actionsEl);
-    attachCopyText(row, () => text);
-}
 
 async function sendDeepResearch(userMessage, loading, session) {
     const bub = loading.querySelector('.bot-bub');
@@ -237,21 +194,7 @@ async function sendDeepResearch(userMessage, loading, session) {
     textEl.className = 'bot-bub-content';
     finalBub.appendChild(textEl);
 
-    const tokens = tokenize(reply);
-    let rendered = '';
-    for (let i = 0; i < tokens.length; i++) {
-        rendered += tokens[i];
-        textEl.innerHTML = fmt(rendered);
-        await sleep(tokens[i].length > 3 ? 4 : 12);
-    }
-    textEl.innerHTML = fmt(rendered);
-    attachCodeCopyListeners(loading);
-
-    const actionsEl = document.createElement('div');
-    actionsEl.className = 'msg-actions';
-    actionsEl.innerHTML = '<button class="copy-text-btn" title="Copy"><i class="fa-regular fa-copy"></i> Copy</button>';
-    finalBub.appendChild(actionsEl);
-    attachCopyText(loading, () => reply);
+    swapTextWithThinkingAndResearch(loading, reply, searchResults);
 
     return reply;
 }
@@ -289,7 +232,7 @@ async function sendChatWithVisionImages(text, images, loading, session) {
     const m = reply.match(/<think>([\s\S]*?)<\/think>/i);
     if (m) { think = m[1].trim(); reply = reply.replace(/<think>[\s\S]*?<\/think>/gi, '').trim(); }
 
-    await typewriterSwapWithThinking(loading, reply, think);
+    swapTextWithThinking(loading, reply, think);
 
     return think ? { content: reply, thinking: think } : reply;
 }

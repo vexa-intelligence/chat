@@ -222,7 +222,7 @@ async function sendChatTextWithSearch(userMessage, loading, session) {
         const m = reply.match(/<think>([\s\S]*?)<\/think>/i);
         if (m) { think = m[1].trim(); reply = reply.replace(/<think>[\s\S]*?<\/think>/gi, '').trim(); }
 
-        await typewriterSwap(loading, reply, think);
+        swapTextWithThinking(loading, reply, think);
         return reply;
     }
 
@@ -283,7 +283,7 @@ async function sendChatTextWithSearch(userMessage, loading, session) {
     const m = reply.match(/<think>([\s\S]*?)<\/think>/i);
     if (m) { think = m[1].trim(); reply = reply.replace(/<think>[\s\S]*?<\/think>/gi, '').trim(); }
 
-    await typewriterSwap(loading, reply, think);
+    swapTextWithThinking(loading, reply, think);
 
     if (searchResults.length) {
         const feed = document.getElementById('feed');

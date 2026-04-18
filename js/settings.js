@@ -68,9 +68,6 @@ function applyVexaSettingsToUI() {
     const showTimestampsToggle = document.getElementById('showTimestampsToggle');
     if (showTimestampsToggle) showTimestampsToggle.checked = !!s.showTimestamps;
 
-    const streamingToggle = document.getElementById('streamingToggle');
-    if (streamingToggle) streamingToggle.checked = s.streaming !== false;
-
     const memoryToggle = document.getElementById('memoryToggle');
     if (memoryToggle) memoryToggle.checked = !!s.memoryEnabled;
 
@@ -117,13 +114,6 @@ function initSettingsControls() {
             } else {
                 document.body.classList.remove('show-timestamps');
             }
-        });
-    }
-
-    const streamingToggle = document.getElementById('streamingToggle');
-    if (streamingToggle) {
-        streamingToggle.addEventListener('change', () => {
-            setVexaSetting('streaming', streamingToggle.checked);
         });
     }
 
