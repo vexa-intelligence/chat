@@ -1,4 +1,4 @@
-﻿let busy = false;
+let busy = false;
 let currentAbortController = null;
 let chatSessions = [];
 let currentSessionId = null;
@@ -166,12 +166,12 @@ function fmt(raw) {
         const taskDone = line.match(/^(\s*)[*\-]\s+\[x\]\s+(.*)$/i);
         const taskTodo = line.match(/^(\s*)[*\-]\s+\[\s*\]\s+(.*)$/);
         if (taskDone) {
-            output.push(`<li class="task-item done"><span class="task-check">âœ“</span> ${taskDone[2]}</li>`);
+            output.push(`<li class="task-item done"><span class="task-check">✓</span> ${taskDone[2]}</li>`);
             i++;
             continue;
         }
         if (taskTodo) {
-            output.push(`<li class="task-item todo"><span class="task-check">â˜</span> ${taskTodo[2]}</li>`);
+            output.push(`<li class="task-item todo"><span class="task-check">☐</span> ${taskTodo[2]}</li>`);
             i++;
             continue;
         }
@@ -256,6 +256,104 @@ function extractText(raw) {
         return String(c?.message?.content ?? c?.text ?? '');
     }
     return JSON.stringify(raw);
+}
+
+async function readSSEStream(response, signal) {
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let fullText = '';
+    let buf = '';
+
+    try {
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            if (signal?.aborted) { reader.cancel(); break; }
+
+            buf += decoder.decode(value, { stream: true });
+            const lines = buf.split('\n');
+            buf = lines.pop();
+
+            for (const line of lines) {
+                if (!line.startsWith('data: ') || line.includes('[DONE]')) continue;
+                try {
+                    const parsed = JSON.parse(line.slice(6));
+                    if (parsed.error) throw new Error(parsed.error.message || 'Stream error');
+                    const chunk = parsed.choices?.[0]?.delta?.content;
+                    if (chunk) fullText += chunk;
+                } catch (e) {
+                    if (e.message !== 'Stream error') continue;
+                    throw e;
+                }
+            }
+        }
+    } finally {
+        reader.releaseLock();
+    }
+
+    return fullText;
+}
+
+async function streamSSEToElement(response, textEl, onChunk, signal) {
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let fullText = '';
+    let buf = '';
+
+    try {
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            if (signal?.aborted) { reader.cancel(); break; }
+
+            buf += decoder.decode(value, { stream: true });
+            const lines = buf.split('\n');
+            buf = lines.pop();
+
+            for (const line of lines) {
+                if (!line.startsWith('data: ') || line.includes('[DONE]')) continue;
+                try {
+                    const parsed = JSON.parse(line.slice(6));
+                    if (parsed.error) throw new Error(parsed.error.message || 'Stream error');
+                    const chunk = parsed.choices?.[0]?.delta?.content;
+                    if (chunk) {
+                        fullText += chunk;
+                        if (onChunk) onChunk(chunk, fullText);
+                    }
+                } catch (e) {
+                    if (e.message !== 'Stream error') continue;
+                    throw e;
+                }
+            }
+        }
+    } finally {
+        reader.releaseLock();
+    }
+
+    return fullText;
+}
+
+async function fetchChat(messages, model, signal) {
+    const res = await fetch(`${CONFIG.BASE}/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: model || currentModel || 'vexa', messages }),
+        signal
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+    return res;
+}
+
+async function fetchQuery(prompt, model) {
+    const res = await fetch(`${CONFIG.BASE}/query`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt, model: model || currentModel || 'vexa' })
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || 'Query failed');
+    return data.response || '';
 }
 
 function scrollBottom() {
@@ -403,16 +501,13 @@ function cancelEdit() {
     }
 }
 
-function addBubbleWithThinking(role, text, msgIndex, thinkingContent = null, researchContent = null) {
+function addBubble(role, text, msgIndex, thinkingContent, researchContent) {
     const feed = document.getElementById('feed');
     const row = document.createElement('div');
     row.className = 'msg-row ' + (role === 'user' ? 'user' : 'bot');
 
-    const s = getVexaSettings ? getVexaSettings() : {};
+    const s = typeof getVexaSettings === 'function' ? getVexaSettings() : {};
     const showTs = !!s.showTimestamps;
-    const tsHtml = showTs
-        ? `<div class="msg-timestamp">${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>`
-        : '';
 
     if (role === 'user') {
         const bub = document.createElement('div');
@@ -428,64 +523,27 @@ function addBubbleWithThinking(role, text, msgIndex, thinkingContent = null, res
 
         if (msgIndex !== undefined) {
             let pressTimer;
-            bub.addEventListener('contextmenu', e => {
-                e.preventDefault();
-                openMsgContextMenu(e, msgIndex);
-            });
-            bub.addEventListener('touchstart', e => {
-                pressTimer = setTimeout(() => openMsgContextMenu(e.touches[0], msgIndex), 500);
-            }, { passive: true });
+            bub.addEventListener('contextmenu', e => { e.preventDefault(); openMsgContextMenu(e, msgIndex); });
+            bub.addEventListener('touchstart', e => { pressTimer = setTimeout(() => openMsgContextMenu(e.touches[0], msgIndex), 500); }, { passive: true });
             bub.addEventListener('touchend', () => clearTimeout(pressTimer));
             bub.addEventListener('touchmove', () => clearTimeout(pressTimer));
             bub.addEventListener('dblclick', e => openMsgContextMenu(e, msgIndex));
         }
     } else {
-
         const bub = document.createElement('div');
         bub.className = 'bot-bub';
 
         if (thinkingContent) {
-            const block = document.createElement('div');
-            block.className = 'think-block';
-            block.innerHTML = `
-                <button class="think-toggle-btn">
-                    <div class="think-toggle-left">
-                        <svg viewBox="0 0 24 24" fill="currentColor" class="think-sparkle-icon"><path d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5L12 2Z"/></svg>
-                        <span class="think-toggle-label">Thought for a moment</span>
-                    </div>
-                    <div class="think-toggle-right">
-                        <span class="think-show-hide">Show thinking</span>
-                        <svg class="think-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-                    </div>
-                </button>
-                <div class="think-content">
-                    <div class="think-content-inner"></div>
-                </div>`;
-            let open = true;
-            const btn = block.querySelector('.think-toggle-btn');
-            const content = block.querySelector('.think-content');
-            const label = block.querySelector('.think-show-hide');
-            const chevron = block.querySelector('.think-chevron');
-            const thinkInner = block.querySelector('.think-content-inner');
-            thinkInner.textContent = thinkingContent;
-            btn.addEventListener('click', () => {
-                open = !open;
-                content.classList.toggle('open', open);
-                chevron.classList.toggle('open', open);
-                label.textContent = open ? 'Hide thinking' : 'Show thinking';
-            });
-            bub.appendChild(block);
+            bub.appendChild(buildThinkBlock(thinkingContent, true));
         }
 
         if (researchContent && researchContent.sources && researchContent.sources.length) {
             const sourceBar = document.createElement('div');
             sourceBar.className = 'dr-final-sources';
             sourceBar.innerHTML = `<span class="dr-final-sources-label"><i class="fa-solid fa-globe" style="font-size:11px;margin-right:5px;color:var(--accent)"></i>Sources</span>`;
-
             researchContent.sources.slice(0, 4).forEach(r => {
                 let domain = r.url;
                 try { domain = new URL(r.url).hostname.replace('www.', ''); } catch { }
-
                 const chip = document.createElement('a');
                 chip.href = r.url;
                 chip.target = '_blank';
@@ -494,14 +552,12 @@ function addBubbleWithThinking(role, text, msgIndex, thinkingContent = null, res
                 chip.innerHTML = `<i class="fa-solid fa-link" style="font-size:10px"></i> ${escHtml(domain)}`;
                 sourceBar.appendChild(chip);
             });
-
             bub.appendChild(sourceBar);
         }
 
-        const rendered = fmt(text);
         const contentDiv = document.createElement('div');
         contentDiv.className = 'bot-bub-content';
-        contentDiv.innerHTML = rendered;
+        contentDiv.innerHTML = fmt(text);
         bub.appendChild(contentDiv);
 
         const actionsEl = document.createElement('div');
@@ -516,14 +572,48 @@ function addBubbleWithThinking(role, text, msgIndex, thinkingContent = null, res
             bub.appendChild(tsEl);
         }
         row.appendChild(bub);
-        let rawText = text;
-        attachCopyText(row, () => rawText);
+        attachCopyText(row, () => text);
         attachCodeCopyListeners(row);
     }
 
     feed.appendChild(row);
-    if (role === 'bot')
-        return row;
+    return row;
+}
+
+function buildThinkBlock(thinkingContent, startOpen) {
+    const block = document.createElement('div');
+    block.className = 'think-block';
+    block.innerHTML = `
+        <button class="think-toggle-btn">
+            <div class="think-toggle-left">
+                <svg viewBox="0 0 24 24" fill="currentColor" class="think-sparkle-icon"><path d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5L12 2Z"/></svg>
+                <span class="think-toggle-label">Thought for a moment</span>
+            </div>
+            <div class="think-toggle-right">
+                <span class="think-show-hide">${startOpen ? 'Hide thinking' : 'Show thinking'}</span>
+                <svg class="think-chevron ${startOpen ? 'open' : ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+            </div>
+        </button>
+        <div class="think-content ${startOpen ? 'open' : ''}">
+            <div class="think-content-inner"></div>
+        </div>`;
+
+    let open = !!startOpen;
+    const btn = block.querySelector('.think-toggle-btn');
+    const content = block.querySelector('.think-content');
+    const label = block.querySelector('.think-show-hide');
+    const chevron = block.querySelector('.think-chevron');
+    const inner = block.querySelector('.think-content-inner');
+    if (thinkingContent) inner.textContent = thinkingContent;
+
+    btn.addEventListener('click', () => {
+        open = !open;
+        content.classList.toggle('open', open);
+        chevron.classList.toggle('open', open);
+        label.textContent = open ? 'Hide thinking' : 'Show thinking';
+    });
+
+    return block;
 }
 
 function addLoading() {
@@ -547,61 +637,17 @@ function swapText(row, text) {
 
 async function generateImageCaption(prompt) {
     try {
-        const response = await fetch(`${CONFIG.BASE}/chat`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                model: currentModel || 'vexa',
-                messages: [
-                    {
-                        role: 'system',
-                        content: `You are an expert art critic and image describer. Create a compelling, artistic caption (3-6 words) for an image generated from this prompt: "${prompt}". 
-
-Requirements:
-- Focus on the artistic style, mood, and key visual elements
-- Use evocative, descriptive language
-- Avoid literal repetition of the prompt
-- Create something that sounds like a professional art gallery caption
-- Examples: "Serene mountain landscape", "Playful puppy portrait", "Abstract digital art", "Majestic wildlife photography"
-- Return ONLY the caption, no quotes or explanation`
-                    },
-                    { role: 'user', content: `Create an artistic caption for an image generated with: ${prompt}` }
-                ]
-            })
-        });
-
-        if (!response.ok) {
-            throw new Error('Failed to generate caption');
+        const caption = await fetchQuery(
+            `Create an artistic caption (3-6 words) for an image generated from this prompt: "${prompt}". Return ONLY the caption, no quotes or explanation.`,
+            currentModel || 'vexa'
+        );
+        let cleaned = caption.replace(/^["']|["']$/g, '').trim();
+        cleaned = cleaned.replace(/^(Image generated|Generated image|Image caption|Caption|Here is|The caption is)[:\s]*/i, '').trim();
+        if (cleaned.length >= 4 && !/^(a|an|the|image|picture)$/.test(cleaned.toLowerCase())) {
+            return cleaned;
         }
-
-        const data = await response.json();
-        if (!data.success) {
-            throw new Error(data.error || 'Failed to generate caption');
-        }
-
-        let caption = data.reply || '';
-        caption = caption.replace(/^["']|["']$/g, '').trim();
-        caption = caption.replace(/^(Image generated|Generated image|Image caption|Caption|Here is|The caption is)[:\s]*/i, '').trim();
-
-        if (caption.length < 4 || /^(a|an|the|image|picture)$/.test(caption.toLowerCase())) {
-            const words = prompt.toLowerCase().split(' ');
-            const styleWords = ['realistic', 'cartoon', 'abstract', 'oil painting', 'watercolor', 'digital art', 'photography', 'portrait', 'landscape'];
-            const subjectWords = ['dog', 'cat', 'person', 'landscape', 'mountain', 'ocean', 'city', 'forest', 'animal', 'portrait'];
-
-            let style = words.find(w => styleWords.includes(w)) || 'artistic';
-            let subject = words.find(w => subjectWords.includes(w)) || 'creation';
-
-            style = style.charAt(0).toUpperCase() + style.slice(1);
-            subject = subject.charAt(0).toUpperCase() + subject.slice(1);
-
-            caption = `${style} ${subject}`;
-        }
-
-        return caption || prompt;
-    } catch (error) {
-        console.error('Failed to generate AI caption:', error);
-        return prompt;
-    }
+    } catch { }
+    return prompt;
 }
 
 function swapImage(row, url, prompt) {
@@ -632,36 +678,10 @@ function swapImage(row, url, prompt) {
 async function typewriterSwap(row, text, think) {
     const bub = row.querySelector('.bot-bub');
     bub.innerHTML = '';
-    if (think) {
-        const block = document.createElement('div');
-        block.className = 'think-block';
-        block.innerHTML = `
-            <button class="think-toggle-btn">
-                <div class="think-toggle-left">
-                    <svg viewBox="0 0 24 24" fill="currentColor" class="think-sparkle-icon"><path d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5L12 2Z"/></svg>
-                    <span class="think-toggle-label">Thought for a moment</span>
-                </div>
-                <div class="think-toggle-right">
-                    <span class="think-show-hide">Show thinking</span>
-                    <svg class="think-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-                </div>
-            </button>
-            <div class="think-content">
-                <div class="think-content-inner"></div>
-            </div>`;
-        let open = true;
-        const btn = block.querySelector('.think-toggle-btn');
-        const content = block.querySelector('.think-content');
-        const label = block.querySelector('.think-show-hide');
-        const chevron = block.querySelector('.think-chevron');
-        btn.addEventListener('click', () => {
-            open = !open;
-            content.classList.toggle('open', open);
-            chevron.classList.toggle('open', open);
-            label.textContent = open ? 'Hide thinking' : 'Show thinking';
-        });
-        bub.appendChild(block);
 
+    if (think) {
+        const block = buildThinkBlock(null, true);
+        bub.appendChild(block);
         const thinkInner = block.querySelector('.think-content-inner');
         let thinkRendered = '';
         for (let i = 0; i < think.length; i++) {
@@ -678,7 +698,6 @@ async function typewriterSwap(row, text, think) {
 
     const tokens = tokenize(text);
     let rendered = '';
-
     for (let i = 0; i < tokens.length; i++) {
         rendered += tokens[i];
         textEl.innerHTML = fmt(rendered);
@@ -721,41 +740,21 @@ function tokenize(text) {
 
 async function generateChatTitle(userMessage, aiReply) {
     try {
-        const res = await fetch(`${CONFIG.BASE}/chat`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                model: currentModel || 'vexa',
-                messages: [
-                    { role: 'system', content: 'You are a helpful assistant. Be concise.' },
-                    { role: 'user', content: `In 4 words or fewer, write a short title for this conversation. Only output the title, no punctuation.\nUser: ${userMessage.slice(0, 200)}\nAssistant: ${aiReply.slice(0, 200)}` }
-                ]
-            })
-        });
-        if (!res.ok) return null;
-        const raw = await res.json();
-        const title = String(extractText(raw)).trim().replace(/^["']|["']$/g, '').slice(0, 60);
-        return title || null;
+        const title = await fetchQuery(
+            `In 4 words or fewer, write a short title for this conversation. Only output the title, no punctuation.\nUser: ${userMessage.slice(0, 200)}\nAssistant: ${aiReply.slice(0, 200)}`,
+            currentModel || 'vexa'
+        );
+        return title.trim().replace(/^["']|["']$/g, '').slice(0, 60) || null;
     } catch { return null; }
 }
 
 async function generateEmptyTitle() {
     try {
-        const res = await fetch(`${CONFIG.BASE}/chat`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                model: currentModel || 'vexa',
-                messages: [
-                    { role: 'system', content: 'You are a friendly, casual assistant. Keep things light, natural, and slightly playful. Be concise.' },
-                    { role: 'user', content: 'Generate a casual, relatable conversation starter someone might say to an AI. Max 6 words. Only output the prompt.' }
-                ]
-            })
-        });
-        if (!res.ok) return '';
-        const raw = await res.json();
-        const title = String(extractText(raw)).trim().replace(/^["']|["']$/g, '').slice(0, 100);
-        return title || '';
+        const title = await fetchQuery(
+            'Generate a casual, relatable conversation starter someone might say to an AI. Max 6 words. Only output the prompt.',
+            currentModel || 'vexa'
+        );
+        return title.trim().replace(/^["']|["']$/g, '').slice(0, 100) || '';
     } catch { return ''; }
 }
 
@@ -766,7 +765,7 @@ async function saveChatToFirebase(sessionId, title, messages) {
         await db.collection('chat_sessions').doc(sessionId).set({
             user_id: currentUser.uid,
             title,
-            messages: messages,
+            messages,
             updated_at: firebase.firestore.FieldValue.serverTimestamp(),
             created_at: firebase.firestore.FieldValue.serverTimestamp()
         }, { merge: true });
@@ -831,22 +830,18 @@ function buildSystemPrompt() {
         try { prefs = JSON.parse(localStorage.getItem('vexa_personalization') || 'null'); } catch { }
     }
 
-    const s = getVexaSettings ? getVexaSettings() : {};
+    const s = typeof getVexaSettings === 'function' ? getVexaSettings() : {};
 
-    if (s.systemPrompt) {
-        return s.systemPrompt.trim();
-    }
+    if (s.systemPrompt) return s.systemPrompt.trim();
 
     const now = new Date();
     const timeOfDay = now.getHours() < 12 ? 'morning' : now.getHours() < 17 ? 'afternoon' : 'evening';
     const dateStr = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 
-    let system = `You are Vexa, a sharp, witty, deeply personal AI. Today is ${dateStr} (${timeOfDay}). You remember everything said in this conversation and reference it naturally. You never repeat yourself, never give generic filler answers. You are direct, insightful, and adapt your tone to the user. When you don't know something, say so plainly. Never start replies with "Of course!", "Certainly!", "Great question!", or sycophantic openers.
-
-When you include internal reasoning in  tags, format it as: "So the user said..." followed by your reasoning points, then your conclusion. This makes your thinking clear and structured.`;
+    let system = `You are Vexa, a sharp, witty, deeply personal AI. Today is ${dateStr} (${timeOfDay}). You remember everything said in this conversation and reference it naturally. You never repeat yourself, never give generic filler answers. You are direct, insightful, and adapt your tone to the user. When you don't know something, say so plainly. Never start replies with "Of course!", "Certainly!", "Great question!", or sycophantic openers.`;
 
     const toneMap = {
-        balanced: 'Be clear and human â€” not robotic, not overly formal.',
+        balanced: 'Be clear and human — not robotic, not overly formal.',
         professional: 'Use professional, precise language. Stay concise.',
         casual: 'Be casual and conversational, like a knowledgeable friend.',
         concise: 'Be extremely concise. One or two sentences max unless more is truly needed.',
@@ -856,7 +851,6 @@ When you include internal reasoning in  tags, format it as: "So the user said...
     if (prefs) {
         const tone = toneMap[prefs.baseTone] || toneMap.balanced;
         system += ' ' + tone;
-
         if (prefs.nickname) system += ` Call the user "${prefs.nickname}" occasionally (not every message).`;
         if (prefs.aboutUser) system += ` Context about who you're talking to: ${prefs.aboutUser}.`;
         if (prefs.customInstructions) system += ` User's custom instructions (follow these): ${prefs.customInstructions}.`;
@@ -879,7 +873,7 @@ When you include internal reasoning in  tags, format it as: "So the user said...
 
     if (s.responseLength) {
         const lenMap = {
-            short: 'Keep all responses brief â€” cut anything that isn\'t essential.',
+            short: "Keep all responses brief — cut anything that isn't essential.",
             balanced: '',
             detailed: 'Give full, detailed responses. Include examples, nuance, and context.'
         };
@@ -941,31 +935,23 @@ async function sendChatText(userMessage, loading, session) {
         { role: 'user', content: userMessage }
     ];
 
-    const res = await fetch(`${CONFIG.BASE}/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: currentModel || 'vexa', messages }),
-        signal: currentAbortController?.signal
-    });
+    const res = await fetchChat(messages, currentModel || 'vexa', currentAbortController?.signal);
+    const reply = await readSSEStream(res, currentAbortController?.signal);
 
-    if (!res.ok) {
-        const errorText = await res.text();
-        console.error('Chat API Error:', res.status, errorText);
-        throw new Error(`HTTP ${res.status}: ${errorText}`);
-    }
+    if (!reply) throw new Error('Empty response from server');
 
-    const raw = await res.json();
-
-    if (!raw.success) {
-        throw new Error(raw.error || 'API returned success: false');
-    }
-
-    let reply = String(extractText(raw)).trim();
+    let text = reply;
     let think = null;
-    const m = reply.match(/<think>([\s\S]*?)<\/think>/i);
-    if (m) { think = m[1].trim(); reply = reply.replace(/<think>[\s\S]*?<\/think>/gi, '').trim(); }
-    if (isStreamingEnabled()) { await typewriterSwap(loading, reply, think); } else { swapText(loading, reply); }
-    return reply;
+    const m = text.match(/<think>([\s\S]*?)<\/think>/i);
+    if (m) { think = m[1].trim(); text = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim(); }
+
+    if (isStreamingEnabled()) {
+        await typewriterSwap(loading, text, think);
+    } else {
+        swapText(loading, text);
+    }
+
+    return text;
 }
 
 async function sendChatImage(prompt, loading) {
@@ -1034,16 +1020,15 @@ async function getImageDescription(dataUrl) {
             const aspect = img.width > img.height * 1.2 ? 'landscape/wide' : img.height > img.width * 1.2 ? 'portrait/tall' : 'square';
             const res = `${img.width}x${img.height}px`;
 
-            resolve(`[Image attached â€” ${res}, ${aspect} orientation, ${brightnessDesc}, dominant tone: ${dominant}. Avg RGB: ${r},${g},${b}]`);
+            resolve(`[Image attached — ${res}, ${aspect} orientation, ${brightnessDesc}, dominant tone: ${dominant}. Avg RGB: ${r},${g},${b}]`);
         };
-        img.onerror = () => resolve('[Image attached â€” could not analyze]');
+        img.onerror = () => resolve('[Image attached — could not analyze]');
         img.src = dataUrl;
     });
 }
 
 async function sendChatWithImages(text, images, loading, session) {
     const history = buildConversationHistory(session);
-
     const descriptions = await Promise.all(images.map(url => getImageDescription(url)));
     const imageContext = descriptions.join(' ');
     const userContent = (text ? text + '\n\n' : 'Describe and analyze this image.\n\n') + imageContext;
@@ -1054,29 +1039,26 @@ async function sendChatWithImages(text, images, loading, session) {
         { role: 'user', content: userContent }
     ];
 
-    const res = await fetch(`${CONFIG.BASE}/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: currentModel || 'vexa', messages })
-    });
+    const res = await fetchChat(messages, currentModel || 'vexa', currentAbortController?.signal);
+    const reply = await readSSEStream(res, currentAbortController?.signal);
 
-    if (!res.ok) {
-        const errorText = await res.text();
-        throw new Error(`HTTP ${res.status}: ${errorText}`);
+    if (!reply) throw new Error('Empty response from server');
+
+    let text2 = reply;
+    let think = null;
+    const m = text2.match(/<think>([\s\S]*?)<\/think>/i);
+    if (m) { think = m[1].trim(); text2 = text2.replace(/<think>[\s\S]*?<\/think>/gi, '').trim(); }
+
+    if (isStreamingEnabled()) {
+        await typewriterSwap(loading, text2, think);
+    } else {
+        swapText(loading, text2);
     }
 
-    const raw = await res.json();
-    if (!raw.success) throw new Error(raw.error || 'API returned success: false');
-
-    let reply = String(extractText(raw)).trim();
-    let think = null;
-    const m = reply.match(/<think>([\s\S]*?)<\/think>/i);
-    if (m) { think = m[1].trim(); reply = reply.replace(/<think>[\s\S]*?<\/think>/gi, '').trim(); }
-    if (isStreamingEnabled()) { await typewriterSwap(loading, reply, think); } else { swapText(loading, reply); }
-    return reply;
+    return text2;
 }
 
-function addBubbleWithImages(role, text, images, index) {
+function addBubbleWithImages(role, text, images) {
     const feed = document.getElementById('feed');
     const row = document.createElement('div');
     row.className = `msg-row ${role}`;
@@ -1092,49 +1074,23 @@ function addBubbleWithImages(role, text, images, index) {
 
     if (images && images.length > 0) {
         const imageContainer = document.createElement('div');
-        imageContainer.className = 'message-images';
-        imageContainer.style.cssText = `
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            margin-top: 8px;
-        `;
-
+        imageContainer.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;';
         images.forEach(imageUrl => {
             const imgWrapper = document.createElement('div');
-            imgWrapper.style.cssText = `
-                position: relative;
-                display: inline-block;
-                max-width: 200px;
-                border-radius: var(--radius);
-                overflow: hidden;
-                border: 1px solid var(--border);
-            `;
-
+            imgWrapper.style.cssText = 'position:relative;display:inline-block;max-width:200px;border-radius:var(--radius);overflow:hidden;border:1px solid var(--border);';
             const img = document.createElement('img');
             img.src = imageUrl;
             img.alt = 'Uploaded image';
-            img.style.cssText = `
-                width: 100%;
-                height: auto;
-                display: block;
-                object-fit: cover;
-            `;
-
+            img.style.cssText = 'width:100%;height:auto;display:block;object-fit:cover;';
             imgWrapper.appendChild(img);
             imageContainer.appendChild(imgWrapper);
         });
-
         bub.appendChild(imageContainer);
     }
 
     row.appendChild(bub);
     feed.appendChild(row);
-
-    setTimeout(() => {
-        feed.scrollTo({ top: feed.scrollHeight, behavior: 'smooth' });
-    }, 100);
-
+    setTimeout(() => { feed.scrollTo({ top: feed.scrollHeight, behavior: 'smooth' }); }, 100);
     return row;
 }
 
@@ -1181,7 +1137,7 @@ async function sendText(text) {
     }
 
     session.messages.push({ role: 'user', content: text });
-    addBubbleWithThinking('user', text);
+    addBubble('user', text);
     const loading = addLoading();
 
     let aiReply = null;
@@ -1200,7 +1156,7 @@ async function sendText(text) {
             aiReply = await sendChatTextWithThinking(text, loading, session);
         } else if (isImg(text)) {
             aiReply = await sendChatImage(cleanImgPrompt(text), loading);
-        } else if (isSearchMode && isSearchMode()) {
+        } else if (typeof isSearchMode === 'function' && isSearchMode()) {
             aiReply = await sendChatTextWithSearch(text, loading, session);
         } else {
             aiReply = await sendChatText(text, loading, session);
@@ -1209,32 +1165,24 @@ async function sendText(text) {
         if (err.name === 'AbortError' || err.message?.includes('aborted')) {
             swapText(loading, 'Chat stopped');
         } else {
-            swapText(loading, 'Error - ' + (err.message || 'try again.'));
+            swapText(loading, 'Error — ' + (err.message || 'try again.'));
         }
     }
 
     if (aiReply) {
-        const replyContent = typeof aiReply === 'object' ? aiReply : aiReply;
+        const replyContent = aiReply;
         if (typeof replyContent === 'object' && replyContent.type === 'image') {
             session.messages.push({ role: 'assistant', content: replyContent });
         } else if (typeof replyContent === 'object' && replyContent.thinking) {
-            session.messages.push({
-                role: 'assistant',
-                content: replyContent.content,
-                thinking: replyContent.thinking
-            });
+            session.messages.push({ role: 'assistant', content: replyContent.content, thinking: replyContent.thinking });
         } else if (typeof replyContent === 'object' && replyContent.research) {
-            session.messages.push({
-                role: 'assistant',
-                content: replyContent.content,
-                research: replyContent.research
-            });
+            session.messages.push({ role: 'assistant', content: replyContent.content, research: replyContent.research });
         } else {
             session.messages.push({ role: 'assistant', content: replyContent });
         }
 
         if (session.messages.filter(m => m.role === 'user').length === 1) {
-            const replyText = typeof aiReply === 'string' ? aiReply : (aiReply && aiReply.content) ? aiReply.content : '';
+            const replyText = typeof aiReply === 'string' ? aiReply : (aiReply?.content || '');
             const aiTitle = await generateChatTitle(text, replyText);
             if (aiTitle) {
                 session.title = aiTitle;
@@ -1256,8 +1204,7 @@ async function sendImagePrompt(prompt) {
     busy = true;
     showPageRaw('chat');
     document.querySelector('.chat-wrap')?.classList.remove('empty-chat');
-    const feedEmpty = document.getElementById('feedEmpty');
-    if (feedEmpty) feedEmpty.remove();
+    document.getElementById('feedEmpty')?.remove();
 
     let session;
     if (!currentSessionId || !chatSessions.find(s => s.id === currentSessionId)) {
@@ -1272,7 +1219,7 @@ async function sendImagePrompt(prompt) {
     }
 
     session.messages.push({ role: 'user', content: prompt });
-    addBubbleWithThinking('user', prompt);
+    addBubble('user', prompt);
     const loading = addLoading();
 
     let aiReply = null;
@@ -1282,19 +1229,18 @@ async function sendImagePrompt(prompt) {
         if (err.name === 'AbortError' || err.message?.includes('aborted')) {
             swapText(loading, 'Request cancelled. Please try again.');
         } else {
-            swapText(loading, 'Error - ' + (err.message || 'try again.'));
+            swapText(loading, 'Error — ' + (err.message || 'try again.'));
         }
     }
 
     if (aiReply) {
-        const replyContent = typeof aiReply === 'object' ? aiReply : aiReply;
-        if (typeof replyContent === 'object' && replyContent.type === 'image') {
-            session.messages.push({ role: 'assistant', content: replyContent });
+        if (typeof aiReply === 'object' && aiReply.type === 'image') {
+            session.messages.push({ role: 'assistant', content: aiReply });
         } else {
-            session.messages.push({ role: 'assistant', content: replyContent });
+            session.messages.push({ role: 'assistant', content: aiReply });
         }
         if (session.messages.filter(m => m.role === 'user').length === 1) {
-            const replyText = typeof aiReply === 'string' ? aiReply : (aiReply && aiReply.content) ? aiReply.content : '';
+            const replyText = typeof aiReply === 'string' ? aiReply : (aiReply?.content || '');
             const aiTitle = await generateChatTitle(prompt, replyText);
             if (aiTitle) {
                 session.title = aiTitle;
@@ -1307,16 +1253,13 @@ async function sendImagePrompt(prompt) {
     busy = false;
     currentAbortController = null;
     setSendBtnState(false);
-    const inp = document.getElementById('inp');
-    if (inp) inp.focus();
+    document.getElementById('inp')?.focus();
     const feed = document.getElementById('feed');
     if (feed) feed.scrollTo({ top: feed.scrollHeight, behavior: 'smooth' });
 }
 
 async function loadSessionIntoChat(session) {
-    if (isLoadingSession) {
-        return;
-    }
+    if (isLoadingSession) return;
     isLoadingSession = true;
 
     try {
@@ -1335,11 +1278,8 @@ async function loadSessionIntoChat(session) {
             const title = await generateEmptyTitle();
             empty.innerHTML = `<div class="feed-empty-title"></div>`;
             feed.appendChild(empty);
-
             const titleEl = empty.querySelector('.feed-empty-title');
-            if (title && titleEl) {
-                await typewriterTitle(titleEl, title);
-            }
+            if (title && titleEl) await typewriterTitle(titleEl, title);
             return;
         }
 
@@ -1349,48 +1289,38 @@ async function loadSessionIntoChat(session) {
             if (typeof content === 'string') {
                 try {
                     const parsed = JSON.parse(content);
-                    if (parsed && typeof parsed === 'object' && parsed.type === 'image') {
-                        content = parsed;
-                    }
-                } catch (e) {
-                }
-            } else if (content && typeof content === 'object' && content.type === 'image') {
+                    if (parsed && typeof parsed === 'object' && parsed.type === 'image') content = parsed;
+                } catch { }
             }
 
             if (content && typeof content === 'object' && content.type === 'image') {
-                const row = addBubbleWithThinking(msg.role === 'user' ? 'user' : 'bot', '', msg.role === 'user' ? index : undefined);
+                const row = addBubble(msg.role === 'user' ? 'user' : 'bot', '', msg.role === 'user' ? index : undefined);
                 if (msg.role === 'assistant') {
                     const imageUrl = content.dataUrl || content.url;
-                    if (imageUrl) {
-                        swapImage(row, imageUrl, content.prompt);
-                    }
+                    if (imageUrl) swapImage(row, imageUrl, content.prompt);
                 }
             } else {
                 let displayContent = content;
-
                 if (typeof displayContent === 'object' && displayContent !== null) {
-                    if (displayContent.type === 'image') {
-                        return;
-                    } else {
-                        displayContent = displayContent.content || displayContent.prompt || JSON.stringify(displayContent);
-                    }
+                    if (displayContent.type === 'image') return;
+                    displayContent = displayContent.content || displayContent.prompt || JSON.stringify(displayContent);
                 }
-
-                addBubbleWithThinking(msg.role === 'user' ? 'user' : 'bot', displayContent, msg.role === 'user' ? index : undefined, msg.role === 'assistant' ? (msg.thinking || null) : null, msg.research || null);
+                addBubble(
+                    msg.role === 'user' ? 'user' : 'bot',
+                    displayContent,
+                    msg.role === 'user' ? index : undefined,
+                    msg.role === 'assistant' ? (msg.thinking || null) : null,
+                    msg.research || null
+                );
             }
         });
+
         renderChatHistory();
         showPageRaw('chat');
         setTimeout(() => {
-            const inp = document.getElementById('inp');
-            if (inp) inp.focus();
+            document.getElementById('inp')?.focus();
             const feed = document.getElementById('feed');
-            if (feed) {
-                feed.scrollTo({
-                    top: feed.scrollHeight,
-                    behavior: 'smooth'
-                });
-            }
+            if (feed) feed.scrollTo({ top: feed.scrollHeight, behavior: 'smooth' });
         }, 100);
     } finally {
         isLoadingSession = false;
@@ -1417,9 +1347,7 @@ async function newChat() {
 
     generateEmptyTitle().then(title => {
         const titleEl = document.querySelector('.feed-empty-title');
-        if (titleEl && title) {
-            typewriterTitle(titleEl, title);
-        }
+        if (titleEl && title) typewriterTitle(titleEl, title);
     });
 }
 
@@ -1427,8 +1355,9 @@ function renderChatHistory() {
     const sidebarList = document.getElementById('chatHistoryList');
     const mobileList = document.getElementById('mobileHistoryList');
 
-    if (sidebarList) {
-        sidebarList.innerHTML = '';
+    [sidebarList, mobileList].forEach(list => {
+        if (!list) return;
+        list.innerHTML = '';
         chatSessions.slice(0, 50).forEach(s => {
             const item = document.createElement('div');
             item.className = 'history-item' + (s.id === currentSessionId ? ' active' : '');
@@ -1437,46 +1366,20 @@ function renderChatHistory() {
                 <div class="history-item-content">${filterLettersNumbers(s.title)}</div>
                 <button class="history-item-del" title="Delete" data-id="${escHtml(s.id)}">
                     <i class="fa-solid fa-xmark"></i>
-                </button>
-            `;
+                </button>`;
             item.querySelector('.history-item-del').addEventListener('click', e => {
                 e.stopPropagation();
                 handleChatDelete(s.id);
             });
-            item.addEventListener('click', (e) => {
+            item.addEventListener('click', e => {
                 if (!e.target.closest('.history-item-del')) {
                     loadSessionIntoChat(s);
+                    if (list === mobileList) closeMobileDrawer();
                 }
             });
-            sidebarList.appendChild(item);
+            list.appendChild(item);
         });
-    }
-
-    if (mobileList) {
-        mobileList.innerHTML = '';
-        chatSessions.slice(0, 50).forEach(s => {
-            const item = document.createElement('div');
-            item.className = 'history-item' + (s.id === currentSessionId ? ' active' : '');
-            item.dataset.id = s.id;
-            item.innerHTML = `
-                <div class="history-item-content">${filterLettersNumbers(s.title)}</div>
-                <button class="history-item-del" title="Delete" data-id="${escHtml(s.id)}">
-                    <i class="fa-solid fa-xmark"></i>
-                </button>
-            `;
-            item.querySelector('.history-item-del').addEventListener('click', e => {
-                e.stopPropagation();
-                handleChatDelete(s.id);
-            });
-            item.addEventListener('click', (e) => {
-                if (!e.target.closest('.history-item-del')) {
-                    loadSessionIntoChat(s);
-                    closeMobileDrawer();
-                }
-            });
-            mobileList.appendChild(item);
-        });
-    }
+    });
 
     if (typeof syncMobileHistory === 'function') syncMobileHistory();
 }
@@ -1495,8 +1398,7 @@ function initChat() {
             const progress = Math.min((currentHeight - minHeight) / (maxHeight - minHeight), 1);
             const baseRadius = 3;
             const minRadius = 1.2;
-            const newRadius = baseRadius - (progress * (baseRadius - minRadius));
-            inputBox.style.borderRadius = newRadius + 'vh';
+            inputBox.style.borderRadius = (baseRadius - (progress * (baseRadius - minRadius))) + 'vh';
         }
         sbtn.disabled = !inp.value.trim();
     });
@@ -1504,17 +1406,16 @@ function initChat() {
     function shouldSendOnEnter() {
         const isMobile = window.innerWidth <= 680;
         if (isMobile) return false;
-        const s = getVexaSettings ? getVexaSettings() : {};
+        const s = typeof getVexaSettings === 'function' ? getVexaSettings() : {};
         return s.sendOnEnter !== false;
     }
 
     inp.addEventListener('keydown', e => {
         if (e.key === 'Enter') {
-            const send = shouldSendOnEnter();
-            if (send && !e.shiftKey) {
+            if (shouldSendOnEnter() && !e.shiftKey) {
                 e.preventDefault();
                 doSend();
-            } else if (!send && e.ctrlKey) {
+            } else if (!shouldSendOnEnter() && e.ctrlKey) {
                 e.preventDefault();
                 doSend();
             }
@@ -1529,7 +1430,6 @@ function setSendBtnState(isGenerating) {
     const sbtn = document.getElementById('sbtn');
     const inp = document.getElementById('inp');
     if (!sbtn) return;
-
     if (isGenerating) {
         sbtn.disabled = false;
         sbtn.innerHTML = '<i class="fa-solid fa-stop" style="font-size:13px"></i>';
@@ -1561,11 +1461,8 @@ function doSend() {
 
 function resetSearchResults() {
     const resultsContainer = document.getElementById('searchResults');
-    resultsContainer.innerHTML = `
-        <div class="search-empty-state">
-            <p>Type to search your chat history</p>
-        </div>
-    `;
+    if (!resultsContainer) return;
+    resultsContainer.innerHTML = `<div class="search-empty-state"><p>Type to search your chat history</p></div>`;
 }
 
 function highlightMatch(text, query) {
@@ -1578,10 +1475,7 @@ function escapeRegExp(string) {
 }
 
 function searchChats(query) {
-    if (!query || query.trim() === '') {
-        resetSearchResults();
-        return;
-    }
+    if (!query || query.trim() === '') { resetSearchResults(); return; }
     const trimmedQuery = query.trim().toLowerCase();
     const results = [];
     chatSessions.forEach(session => {
@@ -1591,9 +1485,8 @@ function searchChats(query) {
         if (session.messages && session.messages.length > 0) {
             for (const message of session.messages) {
                 let messageContent = '';
-                if (typeof message.content === 'string') {
-                    messageContent = message.content;
-                } else if (message.content && typeof message.content === 'object') {
+                if (typeof message.content === 'string') messageContent = message.content;
+                else if (message.content && typeof message.content === 'object') {
                     messageContent = message.content.type === 'image' ? (message.content.prompt || '') : String(message.content);
                 }
                 if (messageContent.toLowerCase().includes(trimmedQuery)) {
@@ -1603,15 +1496,14 @@ function searchChats(query) {
                 }
             }
         }
-        if (titleMatch || contentMatch) {
-            results.push({ session, titleMatch, contentMatch, matchedContent });
-        }
+        if (titleMatch || contentMatch) results.push({ session, titleMatch, contentMatch, matchedContent });
     });
     renderSearchResults(results, trimmedQuery);
 }
 
 function renderSearchResults(results, query) {
     const resultsContainer = document.getElementById('searchResults');
+    if (!resultsContainer) return;
     if (results.length === 0) {
         resultsContainer.innerHTML = `<div class="search-no-results"><i class="fa-solid fa-search"></i><p>No chats found matching "${escHtml(query)}"</p></div>`;
         return;
@@ -1659,15 +1551,16 @@ function renderSearchResults(results, query) {
 function initSearch() {
     const searchInput = document.getElementById('searchInput');
     const searchModalOverlay = document.getElementById('searchModalOverlay');
-    searchInput.addEventListener('input', (e) => {
+    if (!searchInput || !searchModalOverlay) return;
+    searchInput.addEventListener('input', e => {
         const value = e.target.value;
         if (value.trim()) searchChats(value);
         else resetSearchResults();
     });
-    searchModalOverlay.addEventListener('click', (e) => {
+    searchModalOverlay.addEventListener('click', e => {
         if (e.target === searchModalOverlay) closeSearchModal();
     });
-    document.addEventListener('keydown', (e) => {
+    document.addEventListener('keydown', e => {
         if (e.key === 'Escape' && !searchModalOverlay.classList.contains('hidden')) closeSearchModal();
     });
 }
@@ -1675,193 +1568,37 @@ function initSearch() {
 function closeSearchModal() {
     const overlay = document.getElementById('searchModalOverlay');
     const input = document.getElementById('searchInput');
-    overlay.classList.add('hidden');
-    input.value = '';
+    overlay?.classList.add('hidden');
+    if (input) input.value = '';
     resetSearchResults();
 }
 
 function openSearchModal() {
     const overlay = document.getElementById('searchModalOverlay');
     const input = document.getElementById('searchInput');
-    overlay.classList.remove('hidden');
-    input.focus();
+    overlay?.classList.remove('hidden');
+    input?.focus();
     resetSearchResults();
 }
 
-function addBubbleWithThinking(role, text, msgIndex, thinkingContent = null, researchContent = null) {
-    const feed = document.getElementById('feed');
-    const row = document.createElement('div');
-    row.className = 'msg-row ' + (role === 'user' ? 'user' : 'bot');
-
-    const s = getVexaSettings ? getVexaSettings() : {};
-    const showTs = !!s.showTimestamps;
-    const tsHtml = showTs
-        ? `<div class="msg-timestamp">${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>`
-        : '';
-
-    if (role === 'user') {
-        const bub = document.createElement('div');
-        bub.className = 'user-bub';
-        bub.innerHTML = escHtml(text).replace(/\n/g, '<br>');
-        if (showTs) {
-            const tsEl = document.createElement('div');
-            tsEl.className = 'msg-timestamp';
-            tsEl.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            bub.appendChild(tsEl);
-        }
-        row.appendChild(bub);
-
-        if (msgIndex !== undefined) {
-            let pressTimer;
-            bub.addEventListener('contextmenu', e => {
-                e.preventDefault();
-                openMsgContextMenu(e, msgIndex);
-            });
-            bub.addEventListener('touchstart', e => {
-                pressTimer = setTimeout(() => openMsgContextMenu(e.touches[0], msgIndex), 500);
-            }, { passive: true });
-            bub.addEventListener('touchend', () => clearTimeout(pressTimer));
-            bub.addEventListener('touchmove', () => clearTimeout(pressTimer));
-            bub.addEventListener('dblclick', e => openMsgContextMenu(e, msgIndex));
-        }
-    } else {
-        const bub = document.createElement('div');
-        bub.className = 'bot-bub';
-
-        if (thinkingContent) {
-            const thinkBlock = document.createElement('div');
-            thinkBlock.className = 'think-block';
-            thinkBlock.innerHTML = `
-                <button class="think-toggle-btn">
-                    <div class="think-toggle-left">
-                        <svg viewBox="0 0 24 24" fill="currentColor" class="think-sparkle-icon"><path d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5L12 2Z"/></svg>
-                        <span class="think-toggle-label">Thought for a moment</span>
-                    </div>
-                    <div class="think-toggle-right">
-                        <span class="think-show-hide">Hide thinking</span>
-                        <svg class="think-chevron open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-                    </div>
-                </button>
-                <div class="think-content open">
-                    <div class="think-content-inner">${escHtml(thinkingContent)}</div>
-                </div>`;
-
-            let open = true;
-            const btn = thinkBlock.querySelector('.think-toggle-btn');
-            const content = thinkBlock.querySelector('.think-content');
-            const label = thinkBlock.querySelector('.think-show-hide');
-            const chevron = thinkBlock.querySelector('.think-chevron');
-            btn.addEventListener('click', () => {
-                open = !open;
-                content.classList.toggle('open', open);
-                chevron.classList.toggle('open', open);
-                label.textContent = open ? 'Hide thinking' : 'Show thinking';
-            });
-
-            bub.appendChild(thinkBlock);
-        }
-
-        if (researchContent && researchContent.sources && researchContent.sources.length) {
-            const sourceBar = document.createElement('div');
-            sourceBar.className = 'dr-final-sources';
-            sourceBar.innerHTML = `<span class="dr-final-sources-label"><i class="fa-solid fa-globe" style="font-size:11px;margin-right:5px;color:var(--accent)"></i>Sources</span>`;
-
-            researchContent.sources.slice(0, 4).forEach(r => {
-                let domain = r.url;
-                try { domain = new URL(r.url).hostname.replace('www.', ''); } catch { }
-
-                const chip = document.createElement('a');
-                chip.href = r.url;
-                chip.target = '_blank';
-                chip.rel = 'noopener noreferrer';
-                chip.className = 'search-source-chip';
-                chip.innerHTML = `<i class="fa-solid fa-link" style="font-size:10px"></i> ${escHtml(domain)}`;
-                sourceBar.appendChild(chip);
-            });
-
-            bub.appendChild(sourceBar);
-        }
-
-        const rendered = fmt(text);
-        const contentDiv = document.createElement('div');
-        contentDiv.className = 'bot-bub-content';
-        contentDiv.innerHTML = rendered;
-        bub.appendChild(contentDiv);
-
-        const actionsDiv = document.createElement('div');
-        actionsDiv.className = 'msg-actions';
-        actionsDiv.innerHTML = '<button class="copy-text-btn" title="Copy message"><i class="fa-regular fa-copy"></i> Copy</button>';
-        bub.appendChild(actionsDiv);
-
-        if (showTs) {
-            const tsEl = document.createElement('div');
-            tsEl.className = 'msg-timestamp';
-            tsEl.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            bub.appendChild(tsEl);
-        }
-        row.appendChild(bub);
-
-        let rawText = text;
-        attachCopyText(row, () => rawText);
-        attachCodeCopyListeners(row);
-    }
-
-    feed.appendChild(row);
-    return row;
-}
-
-function loadSessionIntoChatWithThinking(session) {
-    currentSessionId = session.id;
-    const feed = document.getElementById('feed');
-    const feedEmpty = document.getElementById('feedEmpty');
-    feed.innerHTML = '';
-    if (feedEmpty) feedEmpty.remove();
-
-    session.messages.forEach((msg, index) => {
-        let content = msg.content;
-
-        if (typeof content === 'string') {
-            try {
-                const parsed = JSON.parse(content);
-                if (parsed && typeof parsed === 'object' && parsed.type === 'image') {
-                    content = parsed;
-                }
-            } catch (e) {
-            }
-        } else if (content && typeof content === 'object' && content.type === 'image') {
-        }
-
-        if (content && typeof content === 'object' && content.type === 'image') {
-            const row = addBubbleWithThinking(msg.role === 'user' ? 'user' : 'bot', '', msg.role === 'user' ? index : undefined);
-            if (msg.role === 'assistant') {
-                const imageUrl = content.dataUrl || content.url;
-                if (imageUrl) {
-                    swapImage(row, imageUrl, content.prompt);
-                }
-            }
-        } else {
-            let displayContent = content;
-
-            if (typeof displayContent === 'object' && displayContent !== null) {
-                if (displayContent.type === 'image') {
-                    return;
-                } else {
-                    displayContent = displayContent.content || displayContent.prompt || JSON.stringify(displayContent);
-                }
-            }
-
-            if (msg.role === 'user') {
-                addBubbleWithThinking('user', displayContent, index);
-            } else if (msg.role === 'assistant') {
-                addBubbleWithThinking('bot', displayContent, index, msg.thinking || null, msg.research || null);
-            }
-        }
-    });
-
-    renderChatHistory();
-    document.querySelector('.chat-wrap')?.classList.remove('empty-chat');
-    scrollBottom();
-}
-
-window.originalLoadSessionIntoChat = window.loadSessionIntoChat;
-window.loadSessionIntoChat = loadSessionIntoChatWithThinking;
+window.addBubble = addBubble;
+window.addBubbleWithThinking = addBubble;
+window.buildThinkBlock = buildThinkBlock;
+window.fetchChat = fetchChat;
+window.fetchQuery = fetchQuery;
+window.readSSEStream = readSSEStream;
+window.streamSSEToElement = streamSSEToElement;
+window.typewriterSwap = typewriterSwap;
+window.swapText = swapText;
+window.swapImage = swapImage;
+window.addLoading = addLoading;
+window.tokenize = tokenize;
+window.fmt = fmt;
+window.escHtml = escHtml;
+window.scrollBottom = scrollBottom;
+window.sleep = sleep;
+window.buildSystemPrompt = buildSystemPrompt;
+window.buildConversationHistory = buildConversationHistory;
+window.attachCopyText = attachCopyText;
+window.attachCodeCopyListeners = attachCodeCopyListeners;
+window.loadSessionIntoChat = loadSessionIntoChat;
