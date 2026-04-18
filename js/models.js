@@ -4,18 +4,40 @@ let currentModelType = 'text';
 
 async function loadModels() {
     if (modelsLoaded) return;
+
     const container = document.getElementById('modelsContainer');
+
     try {
         const res = await fetch(`${CONFIG.BASE}/models`);
         if (!res.ok) throw new Error('HTTP ' + res.status);
+
         const raw = await res.json();
-        allTextModels = raw.models ? Object.entries(raw.models) : [];
+        const providerMap = raw.text_models_by_provider || {};
+
+        allTextModels = raw.text_models.map(id => {
+            let info = { label: id, provider: 'Unknown', description: '' };
+
+            for (const group of Object.values(providerMap)) {
+                const match = group.find(m => m.name === id);
+                if (match) {
+                    info = {
+                        label: match.label || id,
+                        provider: match.provider || 'Unknown',
+                        description: match.description || ''
+                    };
+                    break;
+                }
+            }
+
+            return [id, info];
+        });
 
         document.getElementById('modelsSubtitle').textContent =
             `${allTextModels.length} models available`;
 
         const defModelSel = document.getElementById('defaultModelSelect');
         if (defModelSel) {
+            defModelSel.innerHTML = '';
             allTextModels.forEach(([id, info]) => {
                 const o = document.createElement('option');
                 o.value = id;
@@ -26,16 +48,20 @@ async function loadModels() {
 
         const list = document.getElementById('modelPickerList');
         if (list) {
+            list.innerHTML = '';
             allTextModels.forEach(([id, info]) => {
                 const item = document.createElement('div');
                 item.className = 'model-picker-item';
                 item.dataset.val = id;
+
                 item.innerHTML = `
                     <div class="mpi-info">
                         <div class="mpi-name">${escHtml(info.label || id)}</div>
-                        <div class="mpi-sub">${escHtml(info.provider || id)}</div>
+                        <div class="mpi-sub">${escHtml(info.provider || 'Unknown')}</div>
                     </div>
-                    <i class="fa-solid fa-check mpi-check" style="font-size:13px"></i>`;
+                    <i class="fa-solid fa-check mpi-check" style="font-size:13px"></i>
+                `;
+
                 item.addEventListener('click', () => setModel(id, info.label || id));
                 list.appendChild(item);
             });
@@ -43,50 +69,72 @@ async function loadModels() {
 
         modelsLoaded = true;
         renderModelsPage(currentModelType);
+
     } catch (err) {
-        if (container) container.innerHTML = `<div class="empty-state">Could not load models: ${escHtml(err.message)}</div>`;
+        if (container) {
+            container.innerHTML =
+                `<div class="empty-state">Could not load models: ${escHtml(err.message)}</div>`;
+        }
     }
 }
 
 function renderModelsPage(type) {
     currentModelType = type;
+
     const container = document.getElementById('modelsContainer');
     if (!container) return;
+
     container.innerHTML = '';
+
+    if (!allTextModels.length) {
+        container.innerHTML = '<div class="empty-state">No text models.</div>';
+        return;
+    }
 
     const list = document.createElement('div');
     list.className = 'model-list-group';
-    if (!allTextModels.length) {
-        container.insertAdjacentHTML('beforeend', '<div class="empty-state">No text models.</div>');
-        return;
-    }
 
     allTextModels.forEach(([id, info]) => {
         const card = document.createElement('div');
         card.className = 'model-card';
+
         const initials = (info.label || id).slice(0, 2).toUpperCase();
-        const speedPct = Math.min(100, Math.round((info.speed || 0) / 10));
-        const badge = speedPct > 70 ? 'Fast' : speedPct > 40 ? 'Medium' : 'Smart';
+
+        const badge = 'Smart';
+
         card.innerHTML = `
             <div class="model-card-icon">${initials}</div>
             <div class="model-card-info">
                 <div class="model-card-name">${escHtml(info.label || id)}</div>
-                <div class="model-card-sub">${escHtml(info.provider || id)}</div>
+                <div class="model-card-sub">${escHtml(info.provider || 'Unknown')}</div>
             </div>
-            <span class="model-card-badge">${badge}</span>`;
-        card.addEventListener('click', () => { setModel(id, info.label || id); showPage('chat'); });
+            <span class="model-card-badge">${badge}</span>
+        `;
+
+        card.addEventListener('click', () => {
+            setModel(id, info.label || id);
+            showPage('chat');
+        });
+
         list.appendChild(card);
     });
+
     container.appendChild(list);
 }
 
 function setModel(val, label) {
     currentModel = val;
     currentModelLabel = label || 'Vexa';
-    document.getElementById('topbarTitle').querySelector('span').textContent = currentModelLabel;
+
+    const title = document.getElementById('topbarTitle');
+    if (title?.querySelector('span')) {
+        title.querySelector('span').textContent = currentModelLabel;
+    }
+
     document.querySelectorAll('.model-picker-item').forEach(el => {
         el.classList.toggle('selected', el.dataset.val === val);
     });
+
     closeModelPicker();
 }
 
