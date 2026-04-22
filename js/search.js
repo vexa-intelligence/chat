@@ -215,14 +215,36 @@ async function sendChatTextWithSearch(userMessage, loading, session) {
         ];
 
         const res = await fetchChat(messages, currentModel || 'vexa', currentAbortController?.signal);
-        let reply = await readSSEStream(res, currentAbortController?.signal);
+
+        const bub = loading.querySelector('.bot-bub');
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'bot-bub-content';
+        bub.innerHTML = '';
+        bub.appendChild(contentDiv);
+
+        const reply = await streamSSEToElement(res, contentDiv, (chunk, fullText) => {
+            contentDiv.innerHTML = fmt(fullText);
+            scrollBottom();
+            attachCodeCopyListeners(loading);
+        }, currentAbortController?.signal);
         if (!reply) throw new Error('Empty response');
 
         let think = null;
         const m = reply.match(/<think>([\s\S]*?)<\/think>/i);
         if (m) { think = m[1].trim(); reply = reply.replace(/<think>[\s\S]*?<\/think>/gi, '').trim(); }
 
-        swapTextWithThinking(loading, reply, think);
+        if (think) {
+            const block = buildThinkBlock(think, false);
+            bub.insertBefore(block, contentDiv);
+        }
+
+        const actionsEl = document.createElement('div');
+        actionsEl.className = 'msg-actions';
+        actionsEl.innerHTML = '<button class="copy-text-btn" title="Copy message"><i class="fa-regular fa-copy"></i> Copy</button>';
+        bub.appendChild(actionsEl);
+        attachCopyText(loading, () => reply);
+        attachCodeCopyListeners(loading);
+
         return reply;
     }
 
@@ -276,14 +298,34 @@ async function sendChatTextWithSearch(userMessage, loading, session) {
     ];
 
     const res = await fetchChat(messages, currentModel || 'vexa', currentAbortController?.signal);
-    let reply = await readSSEStream(res, currentAbortController?.signal);
+
+    const bub = loading.querySelector('.bot-bub');
+    const contentDiv = document.createElement('div');
+    contentDiv.className = 'bot-bub-content';
+    bub.appendChild(contentDiv);
+
+    const reply = await streamSSEToElement(res, contentDiv, (chunk, fullText) => {
+        contentDiv.innerHTML = fmt(fullText);
+        scrollBottom();
+        attachCodeCopyListeners(loading);
+    }, currentAbortController?.signal);
     if (!reply) throw new Error('Empty response');
 
     let think = null;
     const m = reply.match(/<think>([\s\S]*?)<\/think>/i);
     if (m) { think = m[1].trim(); reply = reply.replace(/<think>[\s\S]*?<\/think>/gi, '').trim(); }
 
-    swapTextWithThinking(loading, reply, think);
+    if (think) {
+        const block = buildThinkBlock(think, false);
+        bub.insertBefore(block, contentDiv);
+    }
+
+    const actionsEl = document.createElement('div');
+    actionsEl.className = 'msg-actions';
+    actionsEl.innerHTML = '<button class="copy-text-btn" title="Copy message"><i class="fa-regular fa-copy"></i> Copy</button>';
+    bub.appendChild(actionsEl);
+    attachCopyText(loading, () => reply);
+    attachCodeCopyListeners(loading);
 
     if (searchResults.length) {
         const feed = document.getElementById('feed');

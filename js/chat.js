@@ -295,6 +295,7 @@ async function streamSSEToElement(response, textEl, onChunk, signal) {
     const decoder = new TextDecoder();
     let fullText = '';
     let buf = '';
+    let firstChunk = true;
 
     try {
         while (true) {
@@ -314,6 +315,14 @@ async function streamSSEToElement(response, textEl, onChunk, signal) {
                     const chunk = parsed.choices?.[0]?.delta?.content;
                     if (chunk) {
                         fullText += chunk;
+                        if (firstChunk) {
+                            const bub = textEl.closest('.bot-bub');
+                            const dots = bub?.querySelector('.dots');
+                            if (dots) dots.remove();
+                            const thinkingInline = bub?.querySelector('.thinking-inline');
+                            if (thinkingInline) thinkingInline.remove();
+                            firstChunk = false;
+                        }
                         if (onChunk) onChunk(chunk, fullText);
                     }
                 } catch (e) {
@@ -733,13 +742,24 @@ async function generateChatTitle(userMessage, aiReply) {
     } catch { return null; }
 }
 
-async function generateEmptyTitle() {
+async function generateEmptyTitle(titleEl = null) {
     try {
-        const title = await fetchQuery(
-            'Generate a casual, relatable conversation starter someone might say to an AI. Max 6 words. Only output the prompt.',
-            currentModel || 'vexa'
-        );
-        return title.trim().replace(/^["']|["']$/g, '').slice(0, 100) || '';
+        const messages = [
+            { role: 'system', content: 'Generate a casual, relatable conversation starter someone might say to an AI. Max 6 words. Only output the prompt.' },
+            { role: 'user', content: 'Generate a conversation starter.' }
+        ];
+
+        const res = await fetchChat(messages, currentModel || 'vexa');
+
+        if (titleEl) {
+            await streamSSEToElement(res, titleEl, (chunk, fullText) => {
+                titleEl.textContent = fullText;
+            });
+            return titleEl.textContent.trim().replace(/^["']|["']$/g, '').slice(0, 100) || '';
+        } else {
+            const title = await readSSEStream(res);
+            return title.trim().replace(/^["']|["']$/g, '').slice(0, 100) || '';
+        }
     } catch { return ''; }
 }
 
@@ -921,7 +941,17 @@ async function sendChatText(userMessage, loading, session) {
     ];
 
     const res = await fetchChat(messages, currentModel || 'vexa', currentAbortController?.signal);
-    const reply = await readSSEStream(res, currentAbortController?.signal);
+
+    const bub = loading.querySelector('.bot-bub');
+    const contentDiv = document.createElement('div');
+    contentDiv.className = 'bot-bub-content';
+    bub.appendChild(contentDiv);
+
+    const reply = await streamSSEToElement(res, contentDiv, (chunk, fullText) => {
+        contentDiv.innerHTML = fmt(fullText);
+        scrollBottom();
+        attachCodeCopyListeners(loading);
+    }, currentAbortController?.signal);
 
     if (!reply) throw new Error('Empty response from server');
 
@@ -930,7 +960,17 @@ async function sendChatText(userMessage, loading, session) {
     const m = text.match(/<think>([\s\S]*?)<\/think>/i);
     if (m) { think = m[1].trim(); text = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim(); }
 
-    swapText(loading, text);
+    if (think) {
+        const block = buildThinkBlock(think, false);
+        bub.insertBefore(block, contentDiv);
+    }
+
+    const actionsEl = document.createElement('div');
+    actionsEl.className = 'msg-actions';
+    actionsEl.innerHTML = '<button class="copy-text-btn" title="Copy message"><i class="fa-regular fa-copy"></i> Copy</button>';
+    bub.appendChild(actionsEl);
+    attachCopyText(loading, () => text);
+    attachCodeCopyListeners(loading);
 
     return text;
 }
@@ -1021,7 +1061,17 @@ async function sendChatWithImages(text, images, loading, session) {
     ];
 
     const res = await fetchChat(messages, currentModel || 'vexa', currentAbortController?.signal);
-    const reply = await readSSEStream(res, currentAbortController?.signal);
+
+    const bub = loading.querySelector('.bot-bub');
+    const contentDiv = document.createElement('div');
+    contentDiv.className = 'bot-bub-content';
+    bub.appendChild(contentDiv);
+
+    const reply = await streamSSEToElement(res, contentDiv, (chunk, fullText) => {
+        contentDiv.innerHTML = fmt(fullText);
+        scrollBottom();
+        attachCodeCopyListeners(loading);
+    }, currentAbortController?.signal);
 
     if (!reply) throw new Error('Empty response from server');
 
@@ -1030,7 +1080,17 @@ async function sendChatWithImages(text, images, loading, session) {
     const m = text2.match(/<think>([\s\S]*?)<\/think>/i);
     if (m) { think = m[1].trim(); text2 = text2.replace(/<think>[\s\S]*?<\/think>/gi, '').trim(); }
 
-    swapText(loading, text2);
+    if (think) {
+        const block = buildThinkBlock(think, false);
+        bub.insertBefore(block, contentDiv);
+    }
+
+    const actionsEl = document.createElement('div');
+    actionsEl.className = 'msg-actions';
+    actionsEl.innerHTML = '<button class="copy-text-btn" title="Copy message"><i class="fa-regular fa-copy"></i> Copy</button>';
+    bub.appendChild(actionsEl);
+    attachCopyText(loading, () => text2);
+    attachCodeCopyListeners(loading);
 
     return text2;
 }
@@ -1071,7 +1131,7 @@ function addBubbleWithImages(role, text, images) {
     return row;
 }
 
-async function sendText(text) {
+async function sendText(text, displayText) {
     busy = true;
     currentAbortController = new AbortController();
     setSendBtnState(true);
@@ -1114,7 +1174,7 @@ async function sendText(text) {
     }
 
     session.messages.push({ role: 'user', content: text });
-    addBubble('user', text);
+    addBubble('user', displayText || text);
     const loading = addLoading();
 
     let aiReply = null;
@@ -1252,11 +1312,12 @@ async function loadSessionIntoChat(session) {
             const empty = document.createElement('div');
             empty.className = 'feed-empty';
             empty.id = 'feedEmpty';
-            const title = await generateEmptyTitle();
-            empty.innerHTML = `<div class="feed-empty-title"></div>`;
+            empty.innerHTML = `<div class="feed-empty-title">...</div>`;
             feed.appendChild(empty);
             const titleEl = empty.querySelector('.feed-empty-title');
-            if (title && titleEl) titleEl.textContent = title;
+            if (titleEl) {
+                generateEmptyTitle(titleEl);
+            }
             return;
         }
 
@@ -1322,45 +1383,66 @@ async function newChat() {
     showPageRaw('chat');
     document.getElementById('inp')?.focus();
 
-    generateEmptyTitle().then(title => {
-        const titleEl = document.querySelector('.feed-empty-title');
-        if (titleEl && title) titleEl.textContent = title;
-    });
+    const titleEl = document.querySelector('.feed-empty-title');
+    if (titleEl) {
+        generateEmptyTitle(titleEl);
+    }
 }
 
 function renderChatHistory() {
     const sidebarList = document.getElementById('chatHistoryList');
     const mobileList = document.getElementById('mobileHistoryList');
 
-    [sidebarList, mobileList].forEach(list => {
-        if (!list) return;
-        list.innerHTML = '';
-        chatSessions.slice(0, 50).forEach(s => {
-            const item = document.createElement('div');
-            item.className = 'history-item' + (s.id === currentSessionId ? ' active' : '');
-            item.dataset.id = s.id;
-            item.innerHTML = `
-                <div class="history-item-content">${filterLettersNumbers(s.title)}</div>
-                <button class="history-item-del" title="Delete" data-id="${escHtml(s.id)}">
-                    <i class="fa-solid fa-xmark"></i>
-                </button>`;
-            item.querySelector('.history-item-del').addEventListener('click', e => {
+    sidebarList?.querySelectorAll('.history-item').forEach(item => item.remove());
+    if (mobileList) {
+        mobileList.querySelectorAll('.history-item').forEach(item => item.remove());
+    }
+
+    chatSessions.slice(0, 50).forEach(s => {
+        if (sidebarList) {
+            const sidebarItem = document.createElement('div');
+            sidebarItem.className = 'history-item' + (s.id === currentSessionId ? ' active' : '');
+            sidebarItem.dataset.id = s.id;
+            sidebarItem.innerHTML = `
+                    <div class="history-item-content">${filterLettersNumbers(s.title)}</div>
+                    <button class="history-item-del" title="Delete" data-id="${escHtml(s.id)}">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>`;
+            sidebarItem.querySelector('.history-item-del').addEventListener('click', e => {
                 e.stopPropagation();
                 handleChatDelete(s.id);
             });
-            item.addEventListener('click', e => {
+            sidebarItem.addEventListener('click', e => {
                 if (!e.target.closest('.history-item-del')) {
                     loadSessionIntoChat(s);
-                    if (list === mobileList) closeMobileDrawer();
                 }
             });
-            list.appendChild(item);
-        });
+            sidebarList.appendChild(sidebarItem);
+        }
+
+        if (mobileList) {
+            const mobileItem = document.createElement('div');
+            mobileItem.className = 'history-item' + (s.id === currentSessionId ? ' active' : '');
+            mobileItem.dataset.id = s.id;
+            mobileItem.innerHTML = `
+                    <div class="history-item-content">${filterLettersNumbers(s.title)}</div>
+                    <button class="history-item-del" data-id="${escHtml(s.id)}">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>`;
+            mobileItem.querySelector('.history-item-del').addEventListener('click', e => {
+                e.stopPropagation();
+                handleChatDelete(s.id);
+            });
+            mobileItem.addEventListener('click', e => {
+                if (!e.target.closest('.history-item-del')) {
+                    loadSessionIntoChat(s);
+                    closeMobileDrawer();
+                }
+            });
+            mobileList.appendChild(mobileItem);
+        }
     });
-
-    if (typeof syncMobileHistory === 'function') syncMobileHistory();
 }
-
 function initChat() {
     const inp = document.getElementById('inp');
     const sbtn = document.getElementById('sbtn');
@@ -1373,9 +1455,9 @@ function initChat() {
             const maxHeight = 160;
             const currentHeight = Math.min(inp.scrollHeight, 160);
             const progress = Math.min((currentHeight - minHeight) / (maxHeight - minHeight), 1);
-            const baseRadius = 3;
-            const minRadius = 1.2;
-            inputBox.style.borderRadius = (baseRadius - (progress * (baseRadius - minRadius))) + 'vh';
+            const baseRadius = 40;
+            const minRadius = 10;
+            inputBox.style.borderRadius = (baseRadius - (progress * (baseRadius - minRadius))) + 'px';
         }
         sbtn.disabled = !inp.value.trim();
     });
@@ -1428,12 +1510,105 @@ function doSend() {
         return;
     }
     const text = inp.value.trim();
-    if (!text) return;
+    const hasDocs = window.uploadedDocs && window.uploadedDocs.length > 0;
+    const hasImages = window.uploadedImages && window.uploadedImages.length > 0;
+    if (!text && !hasDocs && !hasImages) return;
     inp.value = '';
     inp.style.height = 'auto';
-    const inputBox = document.querySelector('.input-box');
-    if (inputBox) inputBox.style.borderRadius = '3vh';
-    sendText(text);
+
+    if (hasDocs) {
+        showPageRaw('chat');
+        document.querySelector('.chat-wrap')?.classList.remove('empty-chat');
+        document.getElementById('feedEmpty')?.remove();
+
+        const docs = [...window.uploadedDocs];
+        const userText = text;
+
+        docs.forEach(doc => {
+            addBubbleWithDocWidget(doc.name, doc.text, userText || '');
+        });
+
+        const docContext = docs.map(doc => {
+            const MAX_CHARS = 60000;
+            const truncated = doc.text.length > MAX_CHARS ? doc.text.slice(0, MAX_CHARS) + '\n[... truncated]' : doc.text;
+            return `<file name="${doc.name}">\n${truncated}\n</file>`;
+        }).join('\n\n');
+
+        const fullText = userText ? userText + '\n\n' + docContext : docContext;
+        const displayText = userText || docs[0].name;
+
+        if (typeof clearUploadedDocs === 'function') clearUploadedDocs();
+
+        if (!currentUser) {
+            const feed = document.getElementById('feed');
+            const row = document.createElement('div');
+            row.className = 'msg-row bot';
+            const bub = document.createElement('div');
+            bub.className = 'bot-bub';
+            bub.innerHTML = '<p>Please <a href="#" onclick="openAuthOverlay()" style="color:var(--accent);text-decoration:underline;">create an account</a>.</p>';
+            row.appendChild(bub);
+            feed.appendChild(row);
+            return;
+        }
+
+        let session;
+        if (!currentSessionId || !chatSessions.find(s => s.id === currentSessionId)) {
+            const newId = crypto.randomUUID ? crypto.randomUUID() : Date.now().toString();
+            session = { id: newId, title: displayText.slice(0, 40), messages: [] };
+            chatSessions.unshift(session);
+            currentSessionId = newId;
+            window.history.pushState({}, '', '/chat/' + newId);
+            renderChatHistory();
+        } else {
+            session = chatSessions.find(s => s.id === currentSessionId);
+        }
+
+        session.messages.push({ role: 'user', content: fullText });
+
+        busy = true;
+        currentAbortController = new AbortController();
+        setSendBtnState(true);
+
+        const loading = addLoading();
+
+        (async () => {
+            let aiReply = null;
+            try {
+                aiReply = await sendChatText(fullText, loading, session);
+            } catch (err) {
+                if (err.name === 'AbortError' || err.message?.includes('aborted')) {
+                    swapText(loading, 'Chat stopped');
+                } else {
+                    swapText(loading, 'Error — ' + (err.message || 'try again.'));
+                }
+            }
+
+            if (aiReply) {
+                session.messages.push({ role: 'assistant', content: aiReply });
+                if (session.messages.filter(m => m.role === 'user').length === 1) {
+                    const aiTitle = await generateChatTitle(displayText, typeof aiReply === 'string' ? aiReply : '');
+                    if (aiTitle) { session.title = aiTitle; renderChatHistory(); }
+                }
+                await saveChatToFirebase(session.id, session.title, session.messages);
+            }
+
+            busy = false;
+            currentAbortController = null;
+            setSendBtnState(false);
+            document.getElementById('inp')?.focus();
+            const feed = document.getElementById('feed');
+            if (feed) feed.scrollTo({ top: feed.scrollHeight, behavior: 'smooth' });
+        })();
+
+        return;
+    }
+
+    const docContext = '';
+    const fullText = text;
+
+    if (typeof clearUploadedDocs === 'function') clearUploadedDocs();
+
+    sendText(fullText, text || (hasImages ? (window.uploadedImages?.[0] ? 'Image' : '') : ''));
 }
 
 function resetSearchResults() {

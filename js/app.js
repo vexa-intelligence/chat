@@ -187,7 +187,8 @@ function syncMobileHistory() {
     const container = document.getElementById('mobileHistoryList');
     if (!container) return;
 
-    container.innerHTML = '';
+    const historyItems = container.querySelectorAll('.history-item');
+    historyItems.forEach(item => item.remove());
 
     chatSessions.slice(0, 50).forEach(s => {
         const item = document.createElement('div');
@@ -274,14 +275,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const el = document.querySelector('.feed-empty-title');
     if (el) {
         el.textContent = '...';
+        generateEmptyTitle(el);
     }
-
-    generateEmptyTitle().then(title => {
-        const titleEl = document.querySelector('.feed-empty-title');
-        if (titleEl && title) {
-            titleEl.textContent = title;
-        }
-    });
 
     let hasFocusedInitially = false;
 

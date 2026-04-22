@@ -14,7 +14,7 @@ async function sendChatTextWithThinking(userMessage, loading, session) {
     const history = buildConversationHistory(session);
 
     const thinkingSystemAddition = `
-You are an advanced reasoning assistant. When you think through a problem, wrap your internal reasoning in <think>...</think> tags before giving your final answer. Be thorough in your reasoning, explore multiple angles, and then present a clean, clear final response after the thinking block.
+You are an advanced reasoning assistant. When you think through a problem, wrap your internal reasoning in <think> tags before giving your final answer. Be thorough in your reasoning, explore multiple angles, and then present a clean, clear final response after the thinking block.
 
 IMPORTANT: Always start your response with <think> tags containing your step-by-step reasoning process. Format your thinking as follows:
 - Start with "So the user said..." followed by a brief restatement of their question
@@ -32,7 +32,17 @@ Then close with </think> tags, then provide your final answer.`;
     loadingBub.innerHTML = `<span class="thinking-inline"><span class="thinking-dot"></span>Thinking…</span>`;
 
     const res = await fetchChat(messages, currentModel || 'vexa', currentAbortController?.signal);
-    const reply = await readSSEStream(res, currentAbortController?.signal);
+
+    const bub = loading.querySelector('.bot-bub');
+    const contentDiv = document.createElement('div');
+    contentDiv.className = 'bot-bub-content';
+    bub.appendChild(contentDiv);
+
+    const reply = await streamSSEToElement(res, contentDiv, (chunk, fullText) => {
+        contentDiv.innerHTML = fmt(fullText);
+        scrollBottom();
+        attachCodeCopyListeners(loading);
+    }, currentAbortController?.signal);
 
     if (!reply) throw new Error('Empty response');
 
@@ -57,11 +67,20 @@ Then close with </think> tags, then provide your final answer.`;
         }
     }
 
-    swapTextWithThinking(loading, text, think);
+    if (think) {
+        const block = buildThinkBlock(think, false);
+        bub.insertBefore(block, contentDiv);
+    }
+
+    const actionsEl = document.createElement('div');
+    actionsEl.className = 'msg-actions';
+    actionsEl.innerHTML = '<button class="copy-text-btn" title="Copy message"><i class="fa-regular fa-copy"></i> Copy</button>';
+    bub.appendChild(actionsEl);
+    attachCopyText(loading, () => text);
+    attachCodeCopyListeners(loading);
 
     return think ? { content: text, thinking: think } : text;
 }
-
 
 async function sendDeepResearch(userMessage, loading, session) {
     const bub = loading.querySelector('.bot-bub');
@@ -153,11 +172,6 @@ async function sendDeepResearch(userMessage, loading, session) {
     ];
 
     const res = await fetchChat(messages, currentModel || 'vexa', currentAbortController?.signal);
-    let reply = await readSSEStream(res, currentAbortController?.signal);
-
-    if (!reply) throw new Error('Empty response');
-
-    reply = reply.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
 
     const finalBub = loading.querySelector('.bot-bub');
     finalBub.innerHTML = '';
@@ -194,7 +208,22 @@ async function sendDeepResearch(userMessage, loading, session) {
     textEl.className = 'bot-bub-content';
     finalBub.appendChild(textEl);
 
-    swapTextWithThinkingAndResearch(loading, reply, searchResults);
+    const reply = await streamSSEToElement(res, textEl, (chunk, fullText) => {
+        textEl.innerHTML = fmt(fullText);
+        scrollBottom();
+        attachCodeCopyListeners(loading);
+    }, currentAbortController?.signal);
+
+    if (!reply) throw new Error('Empty response');
+
+    reply = reply.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+
+    const actionsEl = document.createElement('div');
+    actionsEl.className = 'msg-actions';
+    actionsEl.innerHTML = '<button class="copy-text-btn" title="Copy message"><i class="fa-regular fa-copy"></i> Copy</button>';
+    finalBub.appendChild(actionsEl);
+    attachCopyText(loading, () => reply);
+    attachCodeCopyListeners(loading);
 
     return reply;
 }
@@ -224,7 +253,17 @@ async function sendChatWithVisionImages(text, images, loading, session) {
     ];
 
     const res = await fetchChat(messages, currentModel || 'vexa', currentAbortController?.signal);
-    let reply = await readSSEStream(res, currentAbortController?.signal);
+
+    const bub = loading.querySelector('.bot-bub');
+    const contentDiv = document.createElement('div');
+    contentDiv.className = 'bot-bub-content';
+    bub.appendChild(contentDiv);
+
+    const reply = await streamSSEToElement(res, contentDiv, (chunk, fullText) => {
+        contentDiv.innerHTML = fmt(fullText);
+        scrollBottom();
+        attachCodeCopyListeners(loading);
+    }, currentAbortController?.signal);
 
     if (!reply) throw new Error('Empty response');
 
@@ -232,7 +271,17 @@ async function sendChatWithVisionImages(text, images, loading, session) {
     const m = reply.match(/<think>([\s\S]*?)<\/think>/i);
     if (m) { think = m[1].trim(); reply = reply.replace(/<think>[\s\S]*?<\/think>/gi, '').trim(); }
 
-    swapTextWithThinking(loading, reply, think);
+    if (think) {
+        const block = buildThinkBlock(think, false);
+        bub.insertBefore(block, contentDiv);
+    }
+
+    const actionsEl = document.createElement('div');
+    actionsEl.className = 'msg-actions';
+    actionsEl.innerHTML = '<button class="copy-text-btn" title="Copy message"><i class="fa-regular fa-copy"></i> Copy</button>';
+    bub.appendChild(actionsEl);
+    attachCopyText(loading, () => reply);
+    attachCodeCopyListeners(loading);
 
     return think ? { content: reply, thinking: think } : reply;
 }

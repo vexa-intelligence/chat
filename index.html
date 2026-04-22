@@ -176,6 +176,13 @@
                                         </div>
                                         <div class="attach-dropdown-divider"></div>
                                         <div class="attach-dropdown-section-label">Attach</div>
+                                        <div class="attach-dropdown-item" onclick="triggerDocUpload()">
+                                            <i class="fa-solid fa-file-lines"></i>
+                                            <span>
+                                                <div class="main-text">Upload file</div>
+                                                <div class="sub-text">TXT, PDF, CSV, JSON, Word, MD…</div>
+                                            </span>
+                                        </div>
                                         <div class="attach-dropdown-item" onclick="triggerImageUpload()">
                                             <i class="fa-solid fa-image"></i>
                                             <span>
@@ -737,14 +744,15 @@
                     U</div>
             </div>
         </div>
-        <div class="mobile-drawer-grid">
-            <button class="mobile-grid-item" onclick="closeMobileDrawer();navigate('/images')">
-                <div class="mobile-grid-icon"><i class="fa-regular fa-image"></i></div>
-            </button>
+        <div class="mobile-drawer-history" id="mobileHistoryList">
+            <div class="mobile-drawer-grid">
+                <button class="mobile-grid-item" onclick="closeMobileDrawer();navigate('/images')">
+                    <div class="mobile-grid-icon"><i class="fa-regular fa-image"></i></div>
+                </button>
+            </div>
+            <div class="mobile-drawer-divider"></div>
+            <div class="mobile-drawer-section-label">Recents</div>
         </div>
-        <div class="mobile-drawer-divider"></div>
-        <div class="mobile-drawer-section-label">Recents</div>
-        <div class="mobile-drawer-history" id="mobileHistoryList"></div>
     </div>
 
     <button id="floatingChatBtn" type="button" class="floating-chat-btn"

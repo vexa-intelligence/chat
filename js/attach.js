@@ -2,13 +2,23 @@ let attachDropdownOpen = false;
 let thinkingModeEnabled = false;
 let deepResearchEnabled = false;
 
-const ALLOWED_TYPES = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif']);
-const MAX_BYTES = 10 * 1024 * 1024;
+const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif']);
+const ALLOWED_DOC_TYPES = new Set([
+    'text/plain', 'text/markdown', 'text/csv', 'text/html',
+    'application/json', 'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+]);
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+const MAX_DOC_BYTES = 2 * 1024 * 1024;
+
+window.uploadedDocs = window.uploadedDocs || [];
 
 function getAttachIcon() {
     if (thinkingModeEnabled) return '<i class="fa-solid fa-lightbulb" style="font-size:15px;"></i>';
     if (deepResearchEnabled) return '<i class="fa-solid fa-flask" style="font-size:15px;"></i>';
     if (window.uploadedImages && window.uploadedImages.length > 0) return '<i class="fa-solid fa-image" style="font-size:15px;"></i>';
+    if (window.uploadedDocs && window.uploadedDocs.length > 0) return '<i class="fa-solid fa-file-lines" style="font-size:15px;"></i>';
     if (isSearchMode && isSearchMode()) return '<i class="fa-solid fa-compass" style="font-size:15px;"></i>';
     return '<i class="fa-solid fa-plus" style="font-size:15px"></i>';
 }
@@ -17,6 +27,20 @@ function updateAttachBtnIcon() {
     const btn = document.getElementById('attachBtn');
     if (!btn) return;
     btn.innerHTML = getAttachIcon();
+}
+
+function updateFeedEmptyTitlePosition() {
+    const titleEl = document.querySelector('.feed-empty-title');
+    if (!titleEl) return;
+
+    const hasImages = window.uploadedImages && window.uploadedImages.length > 0;
+    const hasDocs = window.uploadedDocs && window.uploadedDocs.length > 0;
+
+    if (hasImages || hasDocs) {
+        titleEl.classList.add('files-uploaded');
+    } else {
+        titleEl.classList.remove('files-uploaded');
+    }
 }
 
 function isThinkingMode() { return thinkingModeEnabled; }
@@ -99,13 +123,8 @@ function closeAttachDropdownOutside(event) {
     const container = document.querySelector('.attach-dropdown-container');
     const dropdown = document.getElementById('attachDropdown');
 
-    if (container && container.contains(event.target)) {
-        return;
-    }
-
-    if (dropdown && dropdown.contains(event.target)) {
-        return;
-    }
+    if (container && container.contains(event.target)) return;
+    if (dropdown && dropdown.contains(event.target)) return;
 
     closeAttachDropdown();
 }
@@ -122,24 +141,162 @@ function closeAttachDropdown() {
 }
 
 function triggerImageUpload() {
-    toast.comingSoon('Image upload');
+    closeAttachDropdown();
+    const input = document.getElementById('imageUploadInput');
+    if (input) { input.disabled = false; input.click(); }
+}
+
+function triggerDocUpload() {
+    closeAttachDropdown();
+    const input = document.getElementById('docUploadInput');
+    if (input) input.click();
 }
 
 function triggerCameraCapture() {
     toast.comingSoon('Camera capture');
 }
 
+function getDocIcon(mimeType, fileName) {
+    const ext = (fileName || '').split('.').pop().toLowerCase();
+    if (mimeType === 'application/pdf' || ext === 'pdf') return 'fa-file-pdf';
+    if (mimeType === 'application/json' || ext === 'json') return 'fa-file-code';
+    if (mimeType === 'text/csv' || ext === 'csv') return 'fa-file-csv';
+    if (mimeType === 'text/html' || ext === 'html' || ext === 'htm') return 'fa-file-code';
+    if (ext === 'md' || ext === 'markdown') return 'fa-file-lines';
+    if (mimeType.startsWith('application/') && (mimeType.includes('word') || ext === 'doc' || ext === 'docx')) return 'fa-file-word';
+    return 'fa-file-lines';
+}
+
+function addDocToInput(fileName, mimeType, text) {
+    const docsRow = getOrCreateDocsRow();
+
+    const chip = document.createElement('div');
+    chip.className = 'input-doc-chip';
+    chip.dataset.fileName = fileName;
+
+    const icon = getDocIcon(mimeType, fileName);
+    const truncated = fileName.length > 22 ? fileName.slice(0, 20) + '…' : fileName;
+    const wordCount = text.trim().split(/\s+/).length;
+    const sizeLabel = wordCount > 1000 ? `${Math.round(wordCount / 1000 * 10) / 10}k words` : `${wordCount} words`;
+
+    chip.innerHTML = `
+        <div class="input-doc-chip-icon"><i class="fa-solid ${icon}"></i></div>
+        <div class="input-doc-chip-info">
+            <div class="input-doc-chip-name">${truncated}</div>
+            <div class="input-doc-chip-meta">${sizeLabel}</div>
+        </div>
+        <button type="button" class="input-doc-chip-remove" title="Remove"><i class="fa-solid fa-xmark" style="font-size:9px"></i></button>
+    `;
+
+    chip.querySelector('.input-doc-chip-remove').addEventListener('click', () => {
+        chip.remove();
+        window.uploadedDocs = window.uploadedDocs.filter(d => d.name !== fileName);
+        const row = document.getElementById('inputDocsRow');
+        if (row && !row.children.length) row.remove();
+        updateAttachBtnIcon();
+        updateFeedEmptyTitlePosition();
+    });
+
+    docsRow.appendChild(chip);
+
+    if (!window.uploadedDocs) window.uploadedDocs = [];
+    window.uploadedDocs.push({ name: fileName, mimeType, text });
+
+    updateAttachBtnIcon();
+    updateFeedEmptyTitlePosition();
+}
+
+function getOrCreateDocsRow() {
+    const existing = document.getElementById('inputDocsRow');
+    if (existing) return existing;
+
+    const inputArea = document.querySelector('.input-area');
+    const inputBox = document.getElementById('chatInputBox');
+    const row = document.createElement('div');
+    row.id = 'inputDocsRow';
+    row.className = 'input-docs-row';
+
+    inputArea.insertBefore(row, inputBox);
+    return row;
+}
+
+async function extractTextFromFile(file) {
+    if (file.type === 'application/pdf') {
+        return await extractTextFromPdf(file);
+    }
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = e => resolve(e.target.result);
+        reader.onerror = () => reject(new Error('Could not read file'));
+        reader.readAsText(file);
+    });
+}
+
+async function extractTextFromPdf(file) {
+    return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            try {
+                const typedArray = new Uint8Array(e.target.result);
+                if (window.pdfjsLib) {
+                    const pdf = await window.pdfjsLib.getDocument({ data: typedArray }).promise;
+                    let fullText = '';
+                    for (let i = 1; i <= Math.min(pdf.numPages, 30); i++) {
+                        const page = await pdf.getPage(i);
+                        const content = await page.getTextContent();
+                        fullText += content.items.map(item => item.str).join(' ') + '\n';
+                    }
+                    resolve(fullText.trim() || '[PDF: no extractable text found]');
+                } else {
+                    resolve('[PDF attached — install a PDF reader to extract text]');
+                }
+            } catch {
+                resolve('[PDF: could not extract text]');
+            }
+        };
+        reader.readAsArrayBuffer(file);
+    });
+}
+
+async function handleDocUpload(file) {
+    if (!file) return;
+
+    const isAllowedDoc = ALLOWED_DOC_TYPES.has(file.type) ||
+        /\.(txt|md|markdown|csv|json|html|htm|pdf|doc|docx)$/i.test(file.name);
+
+    if (!isAllowedDoc) {
+        if (typeof toast !== 'undefined') toast.show('Unsupported file type', 'Only text, PDF, CSV, JSON, and Word docs are supported.');
+        else alert('Unsupported file type.');
+        return;
+    }
+
+    if (file.size > MAX_DOC_BYTES) {
+        if (typeof toast !== 'undefined') toast.show('File too large', 'Max document size is 2 MB.');
+        else alert('File is too large. Maximum is 2 MB.');
+        return;
+    }
+
+    try {
+        const text = await extractTextFromFile(file);
+        addDocToInput(file.name, file.type || 'text/plain', text);
+        closeAttachDropdown();
+    } catch (err) {
+        if (typeof toast !== 'undefined') toast.show('Read error', err.message || 'Could not read file.');
+        else alert('Could not read file.');
+    }
+}
+
 async function handleImageUpload(event) {
     const file = event.target.files[0];
     if (!file) return;
 
-    if (!ALLOWED_TYPES.has(file.type)) {
+    if (!ALLOWED_IMAGE_TYPES.has(file.type)) {
         alert('Please select a valid image file (JPEG, PNG, WEBP, or GIF)');
         event.target.value = '';
         return;
     }
 
-    if (file.size > MAX_BYTES) {
+    if (file.size > MAX_IMAGE_BYTES) {
         alert('Image is too large. Maximum size is 10 MB');
         event.target.value = '';
         return;
@@ -182,6 +339,7 @@ function addImageToInput(imageUrl) {
 
     inp.placeholder = 'Ask about the image...';
     updateAttachBtnIcon();
+    updateFeedEmptyTitlePosition();
 }
 
 function removeInputImage(btn, imageUrl) {
@@ -197,6 +355,7 @@ function removeInputImage(btn, imageUrl) {
         inp.placeholder = 'Ask anything';
     }
     updateAttachBtnIcon();
+    updateFeedEmptyTitlePosition();
 }
 
 function createImagesRow() {
@@ -207,8 +366,221 @@ function createImagesRow() {
     const row = document.createElement('div');
     row.id = 'inputImagesRow';
     row.className = 'input-images-row';
-    inputBox.insertBefore(row, inputBox.firstChild);
+
+    const docsRow = document.getElementById('inputDocsRow');
+    if (docsRow) {
+        inputBox.insertBefore(row, docsRow.nextSibling);
+    } else {
+        inputBox.insertBefore(row, inputBox.firstChild);
+    }
     return row;
+}
+
+function clearUploadedDocs() {
+    window.uploadedDocs = [];
+    document.getElementById('inputDocsRow')?.remove();
+    updateAttachBtnIcon();
+    updateFeedEmptyTitlePosition();
+}
+
+function buildDocContext() {
+    if (!window.uploadedDocs || !window.uploadedDocs.length) return '';
+    return window.uploadedDocs.map(doc => {
+        const MAX_CHARS = 60000;
+        const truncated = doc.text.length > MAX_CHARS ? doc.text.slice(0, MAX_CHARS) + '\n[... truncated]' : doc.text;
+        return `<file name="${doc.name}">\n${truncated}\n</file>`;
+    }).join('\n\n');
+}
+
+function parseDocWidgetData(text) {
+    const sections = [];
+    const lines = text.split('\n');
+    let currentSection = null;
+    let currentRows = [];
+
+    const tableHeaderRe = /^Category\s+School\s*#?1\s+School\s*#?2/i;
+    const sectionRe = /^SECTION\s+\d+[:\s]+(.+)/i;
+    const reflectionRe = /^(SECTION 5|BEST FIT SCORE|FINAL REFLECTION)/i;
+
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+
+        if (sectionRe.test(line)) {
+            if (currentSection) sections.push({ ...currentSection, rows: currentRows });
+            currentSection = { title: line, rows: [] };
+            currentRows = [];
+            continue;
+        }
+
+        if (tableHeaderRe.test(line)) continue;
+
+        if (currentSection) {
+            const parts = line.split(/\s{2,}|\t/);
+            if (parts.length >= 2) {
+                currentRows.push(parts.map(p => p.trim()).filter(Boolean));
+            } else {
+                currentRows.push([line]);
+            }
+        }
+    }
+
+    if (currentSection) sections.push({ ...currentSection, rows: currentRows });
+    return sections;
+}
+
+function renderDocAsWidget(fileName, text) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'doc-widget-wrap';
+    wrapper.style.cssText = 'background:var(--surface);border-radius:16px;overflow:hidden;margin-bottom:12px;border:1px solid var(--border);max-width:100%;';
+
+    const header = document.createElement('div');
+    header.style.cssText = 'display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--border);background:var(--surface2);';
+    header.innerHTML = `<i class="fa-solid fa-file-lines" style="color:var(--accent);font-size:16px;flex-shrink:0;"></i><span style="font-size:0.9375rem;font-weight:600;color:var(--fg);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(fileName)}</span>`;
+    wrapper.appendChild(header);
+
+    const body = document.createElement('div');
+    body.style.cssText = 'padding:16px 18px;overflow-x:auto;';
+
+    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+    let currentTable = null;
+    let html = '';
+    let inReflection = false;
+
+    const tableHeaderRe = /^Category\s+School/i;
+    const sectionRe = /^SECTION\s+\d+/i;
+    const reflectionRe = /FINAL REFLECTION|BEST FIT SCORE/i;
+    const instructionsRe = /^Instructions:/i;
+
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+
+        if (reflectionRe.test(line)) {
+            inReflection = true;
+            html += `<div style="font-size:0.8125rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;margin:18px 0 10px;">${escHtml(line)}</div>`;
+            continue;
+        }
+
+        if (instructionsRe.test(line)) {
+            html += `<div style="font-size:0.8rem;color:var(--muted);margin-bottom:10px;font-style:italic;">${escHtml(line)}</div>`;
+            continue;
+        }
+
+        if (sectionRe.test(line)) {
+            inReflection = false;
+            html += `<div style="font-size:0.8125rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;margin:18px 0 8px;">${escHtml(line)}</div>`;
+            continue;
+        }
+
+        if (tableHeaderRe.test(line)) {
+            const cols = line.split(/\s{2,}|\t/).map(c => c.trim()).filter(Boolean);
+            html += `<div style="overflow-x:auto;margin-bottom:4px;"><table style="width:100%;border-collapse:collapse;font-size:0.8125rem;">`;
+            html += `<thead><tr>`;
+            cols.forEach((col, ci) => {
+                html += `<th style="padding:8px 12px;text-align:${ci === 0 ? 'left' : 'center'};background:var(--surface3);color:var(--fg-muted);font-weight:600;border:1px solid var(--border);white-space:nowrap;">${escHtml(col)}</th>`;
+            });
+            html += `</tr></thead><tbody>`;
+            currentTable = { cols: cols.length };
+            continue;
+        }
+
+        if (currentTable) {
+            const parts = line.split(/\s{2,}|\t/).map(p => p.trim()).filter(Boolean);
+            if (parts.length >= 1) {
+                const isScore = /^\d+$/.test(parts[parts.length - 1]);
+                html += `<tr>`;
+                for (let c = 0; c < currentTable.cols; c++) {
+                    const val = parts[c] || '';
+                    const center = c > 0;
+                    html += `<td contenteditable="true" data-placeholder="${c === 0 ? '' : '—'}" style="padding:8px 12px;border:1px solid var(--border);color:var(--fg);text-align:${center ? 'center' : 'left'};background:var(--surface);min-width:${c === 0 ? '160px' : '120px'};cursor:text;outline:none;" onfocus="this.style.background='var(--surface2)'" onblur="this.style.background='var(--surface)'">${escHtml(val)}</td>`;
+                }
+                html += `</tr>`;
+
+                const nextLine = lines[i + 1]?.trim() || '';
+                const isNextHeader = tableHeaderRe.test(nextLine) || sectionRe.test(nextLine) || reflectionRe.test(nextLine) || !nextLine;
+                if (isNextHeader) {
+                    html += `</tbody></table></div>`;
+                    currentTable = null;
+                }
+            } else {
+                html += `</tbody></table></div>`;
+                currentTable = null;
+                i--;
+            }
+            continue;
+        }
+
+        if (inReflection) {
+            if (/_{3,}/.test(line)) {
+                html += `<div contenteditable="true" style="min-height:36px;border-bottom:1px solid var(--border);margin:6px 0;padding:6px 4px;font-size:0.9rem;color:var(--fg);outline:none;cursor:text;" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'"></div>`;
+            } else {
+                html += `<div style="font-size:0.875rem;color:var(--fg-muted);margin:8px 0 4px;font-weight:500;">${escHtml(line)}</div>`;
+            }
+            continue;
+        }
+
+        html += `<div style="font-size:0.875rem;color:var(--fg-muted);margin:4px 0;">${escHtml(line)}</div>`;
+    }
+
+    if (currentTable) html += `</tbody></table></div>`;
+
+    body.innerHTML = html;
+
+    const saveBtn = document.createElement('button');
+    saveBtn.style.cssText = 'margin:4px 18px 16px;padding:8px 18px;border-radius:8px;background:var(--fg);color:var(--bg);font-size:0.8125rem;font-weight:600;border:none;cursor:pointer;font-family:var(--font);';
+    saveBtn.textContent = 'Save to Firebase';
+    saveBtn.addEventListener('click', async () => {
+        const db = window.firebaseDB;
+        if (!db || !currentUser) {
+            if (typeof toast !== 'undefined') toast.show('Not signed in', 'Please sign in to save.');
+            return;
+        }
+        const cells = body.querySelectorAll('[contenteditable]');
+        const saved = [];
+        cells.forEach((cell, idx) => {
+            saved.push({ index: idx, value: cell.innerText.trim() });
+        });
+        try {
+            await db.collection('doc_widgets').add({
+                user_id: currentUser.uid,
+                file_name: fileName,
+                cells: saved,
+                saved_at: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            saveBtn.textContent = 'Saved ✓';
+            setTimeout(() => { saveBtn.textContent = 'Save to Firebase'; }, 2000);
+        } catch (e) {
+            if (typeof toast !== 'undefined') toast.show('Save failed', e.message || 'Try again.');
+        }
+    });
+
+    wrapper.appendChild(body);
+    wrapper.appendChild(saveBtn);
+    return wrapper;
+}
+
+function addBubbleWithDocWidget(fileName, text, userText) {
+    const feed = document.getElementById('feed');
+
+    const userRow = document.createElement('div');
+    userRow.className = 'msg-row user';
+    const userBub = document.createElement('div');
+    userBub.className = 'user-bub';
+    userBub.style.cssText = 'display:flex;flex-direction:column;gap:10px;max-width:90%;';
+
+    const widget = renderDocAsWidget(fileName, text);
+    userBub.appendChild(widget);
+
+    if (userText) {
+        const textP = document.createElement('p');
+        textP.style.cssText = 'margin:0;font-size:0.9375rem;line-height:1.55;';
+        textP.textContent = userText;
+        userBub.appendChild(textP);
+    }
+
+    userRow.appendChild(userBub);
+    feed.appendChild(userRow);
+    return userRow;
 }
 
 function injectAttachButton() {
@@ -228,12 +600,125 @@ function injectAttachButton() {
     }
 
     const imageUploadInput = document.getElementById('imageUploadInput');
-    const cameraInput = document.getElementById('cameraInput');
-    if (imageUploadInput) imageUploadInput.disabled = true;
-    if (cameraInput) cameraInput.disabled = true;
+    if (imageUploadInput) {
+        imageUploadInput.addEventListener('change', handleImageUpload);
+    }
+
+    const docInput = document.createElement('input');
+    docInput.type = 'file';
+    docInput.id = 'docUploadInput';
+    docInput.accept = '.txt,.md,.markdown,.csv,.json,.html,.htm,.pdf,.doc,.docx,text/plain,text/markdown,text/csv,application/json,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    docInput.style.display = 'none';
+    docInput.multiple = true;
+    document.body.appendChild(docInput);
+
+    docInput.addEventListener('change', async (e) => {
+        const files = Array.from(e.target.files || []);
+        for (const file of files) {
+            await handleDocUpload(file);
+        }
+        e.target.value = '';
+    });
+
+    initPasteAndDrop();
+}
+
+function initPasteAndDrop() {
+    const inp = document.getElementById('inp');
+    const inputBox = document.getElementById('chatInputBox');
+    if (!inp || !inputBox) return;
+
+    inp.addEventListener('paste', async (e) => {
+        const items = Array.from(e.clipboardData?.items || []);
+
+        const fileItems = items.filter(item => item.kind === 'file');
+        if (!fileItems.length) return;
+
+        const imageFiles = fileItems.filter(item => ALLOWED_IMAGE_TYPES.has(item.type));
+        const docFiles = fileItems.filter(item => !ALLOWED_IMAGE_TYPES.has(item.type));
+
+        if (imageFiles.length || docFiles.length) {
+            e.preventDefault();
+        }
+
+        for (const item of imageFiles) {
+            const file = item.getAsFile();
+            if (!file) continue;
+            if (file.size > MAX_IMAGE_BYTES) {
+                if (typeof toast !== 'undefined') toast.show('Image too large', 'Max 10 MB per image.');
+                continue;
+            }
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                addImageToInput(ev.target.result);
+                updateAttachBtnIcon();
+            };
+            reader.readAsDataURL(file);
+        }
+
+        for (const item of docFiles) {
+            const file = item.getAsFile();
+            if (file) await handleDocUpload(file);
+        }
+    });
+
+    const dropZone = inputBox;
+
+    dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dropZone.classList.add('drag-over');
+    });
+
+    dropZone.addEventListener('dragleave', (e) => {
+        if (!dropZone.contains(e.relatedTarget)) {
+            dropZone.classList.remove('drag-over');
+        }
+    });
+
+    dropZone.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dropZone.classList.remove('drag-over');
+
+        const files = Array.from(e.dataTransfer?.files || []);
+        for (const file of files) {
+            if (ALLOWED_IMAGE_TYPES.has(file.type)) {
+                if (file.size > MAX_IMAGE_BYTES) {
+                    if (typeof toast !== 'undefined') toast.show('Image too large', 'Max 10 MB.');
+                    continue;
+                }
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    addImageToInput(ev.target.result);
+                    updateAttachBtnIcon();
+                };
+                reader.readAsDataURL(file);
+            } else {
+                await handleDocUpload(file);
+            }
+        }
+    });
+
+    document.addEventListener('dragover', (e) => {
+        if (!e.target.closest('#chatInputBox')) {
+            e.dataTransfer.dropEffect = 'none';
+        }
+    });
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+    if (!window.pdfjsLib) {
+        const script = document.createElement('script');
+        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+        script.onload = () => {
+            if (window.pdfjsLib) {
+                window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+            }
+        };
+        document.head.appendChild(script);
+    }
+
     function restoreAttachModes() {
         const s = typeof getVexaSettings === 'function' ? getVexaSettings() : {};
         thinkingModeEnabled = !!s.thinkingMode;
@@ -242,7 +727,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (typeof toggleSearchMode === 'function' && typeof isSearchMode === 'function') {
             const currentSearchMode = isSearchMode();
             const savedSearchMode = s.searchMode;
-
             if (savedSearchMode !== currentSearchMode) {
                 toggleSearchMode();
             }
