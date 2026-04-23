@@ -14,7 +14,12 @@ async function loadModels() {
         const raw = await res.json();
         const providerMap = raw.text_models_by_provider || {};
 
-        allTextModels = raw.text_models.map(id => {
+        const modelIds = new Set(raw.text_models || []);
+        for (const group of Object.values(providerMap)) {
+            group.forEach(m => modelIds.add(m.name));
+        }
+
+        allTextModels = Array.from(modelIds).map(id => {
             let info = { label: id, provider: 'Unknown', description: '' };
 
             for (const group of Object.values(providerMap)) {

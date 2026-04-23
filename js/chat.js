@@ -212,12 +212,8 @@ function fmt(raw) {
         return `<${tag}>${inner}</${tag}>`;
     });
 
-    html = html.replace(/\n/g, ' ');
-
-    const paragraphs = html.split(/<br>\s*<br>/);
-    if (paragraphs.length > 1) {
-        html = paragraphs.map(p => p.trim() ? `<p>${p.trim()}</p>` : '').join('');
-    }
+    html = html.replace(/<br-blank>/g, '<br><br>');
+    html = html.replace(/\n/g, '<br>');
 
     html = html.replace(/\x00CODE(\d+)\x00/g, (_, idx) => {
         const { lang, code } = codeBlocks[parseInt(idx)];
@@ -276,7 +272,7 @@ async function readSSEStream(response, signal) {
                     const parsed = JSON.parse(line.slice(6));
                     if (parsed.error) throw new Error(parsed.error.message || 'Stream error');
                     const chunk = parsed.choices?.[0]?.delta?.content;
-                    if (chunk) fullText += chunk;
+                    if (chunk) fullText += chunk.replace(/\\n/g, '\n');
                 } catch (e) {
                     if (e.message !== 'Stream error') continue;
                     throw e;
@@ -314,7 +310,8 @@ async function streamSSEToElement(response, textEl, onChunk, signal) {
                     if (parsed.error) throw new Error(parsed.error.message || 'Stream error');
                     const chunk = parsed.choices?.[0]?.delta?.content;
                     if (chunk) {
-                        fullText += chunk;
+                        const unescaped = chunk.replace(/\\n/g, '\n');
+                        fullText += unescaped;
                         if (firstChunk) {
                             const bub = textEl.closest('.bot-bub');
                             const dots = bub?.querySelector('.dots');
@@ -323,7 +320,7 @@ async function streamSSEToElement(response, textEl, onChunk, signal) {
                             if (thinkingInline) thinkingInline.remove();
                             firstChunk = false;
                         }
-                        if (onChunk) onChunk(chunk, fullText);
+                        if (onChunk) onChunk(unescaped, fullText);
                     }
                 } catch (e) {
                     if (e.message !== 'Stream error') continue;
@@ -539,10 +536,10 @@ function addBubble(role, text, msgIndex, thinkingContent, researchContent) {
             sourceBar.className = 'dr-final-sources';
             sourceBar.innerHTML = `<span class="dr-final-sources-label"><i class="fa-solid fa-globe" style="font-size:11px;margin-right:5px;color:var(--accent)"></i>Sources</span>`;
             researchContent.sources.slice(0, 4).forEach(r => {
-                let domain = r.url;
+                let domain = String(r.url);
                 try { domain = new URL(r.url).hostname.replace('www.', ''); } catch { }
                 const chip = document.createElement('a');
-                chip.href = r.url;
+                chip.href = String(r.url);
                 chip.target = '_blank';
                 chip.rel = 'noopener noreferrer';
                 chip.className = 'search-source-chip';
@@ -663,10 +660,10 @@ function swapTextWithThinkingAndResearch(row, text, searchResults) {
         sourceBar.className = 'dr-final-sources';
         sourceBar.innerHTML = `<span class="dr-final-sources-label"><i class="fa-solid fa-globe" style="font-size:11px;margin-right:5px;color:var(--accent)"></i>Sources</span>`;
         searchResults.slice(0, 4).forEach(r => {
-            let domain = r.url;
+            let domain = String(r.url);
             try { domain = new URL(r.url).hostname.replace('www.', ''); } catch { }
             const chip = document.createElement('a');
-            chip.href = r.url;
+            chip.href = String(r.url);
             chip.target = '_blank';
             chip.rel = 'noopener noreferrer';
             chip.className = 'search-source-chip';

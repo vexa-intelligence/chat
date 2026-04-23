@@ -75,14 +75,31 @@ function buildSearchContext(query, data) {
     if (!data || !data.results || !data.results.all || !data.results.all.length) return null;
     const results = data.results.all.slice(0, 5);
     let ctx = 'Web search results for: "' + query + '"\n\n';
+
+    const safeStringify = (val) => {
+        if (val === null || val === undefined) return '';
+        if (typeof val === 'string') return val;
+        if (typeof val === 'object') return JSON.stringify(val, null, 2);
+        return String(val);
+    };
+
     results.forEach((r, i) => {
-        ctx += '[' + (i + 1) + '] ' + (r.title || 'No title') + '\n';
-        ctx += 'URL: ' + r.url + '\n';
-        if (r.content) ctx += r.content.slice(0, 300) + '\n';
+        const title = safeStringify(r.title) || 'No title';
+        const url = safeStringify(r.url) || '';
+        const content = safeStringify(r.content)?.slice(0, 300) || '';
+        ctx += '[' + (i + 1) + '] ' + title + '\n';
+        ctx += 'URL: ' + url + '\n';
+        if (content) ctx += content + '\n';
         ctx += '\n';
     });
-    if (data.answers && data.answers.length) ctx += 'Direct answer: ' + data.answers[0] + '\n\n';
-    if (data.infobox && data.infobox.content) ctx += 'Info: ' + data.infobox.content.slice(0, 400) + '\n\n';
+    if (data.answers && data.answers.length) {
+        const answer = safeStringify(data.answers[0]) || '';
+        ctx += 'Direct answer: ' + answer + '\n\n';
+    }
+    if (data.infobox && data.infobox.content) {
+        const info = safeStringify(data.infobox.content)?.slice(0, 400) || '';
+        ctx += 'Info: ' + info + '\n\n';
+    }
     ctx += "Use the search results above to answer the user's question. Do NOT output any HTML. Do not include source links or citations in your response.";
     return ctx;
 }
@@ -332,11 +349,11 @@ async function sendChatTextWithSearch(userMessage, loading, session) {
         sourceBar.className = 'dr-final-sources';
         sourceBar.innerHTML = `<span class="dr-final-sources-label"><i class="fa-solid fa-globe" style="font-size:11px;margin-right:5px;color:var(--accent)"></i>Sources</span>`;
         searchResults.slice(0, 4).forEach(r => {
-            let domain = '';
+            let domain = String(r.url);
             try { domain = new URL(r.url).hostname.replace('www.', ''); } catch { domain = r.url; }
             const favicon = `https://favicon.vemetric.com/${domain}`;
             const chip = document.createElement('a');
-            chip.href = escHtml(r.url);
+            chip.href = escHtml(String(r.url));
             chip.target = '_blank';
             chip.rel = 'noopener noreferrer';
             chip.className = 'search-source-chip';

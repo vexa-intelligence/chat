@@ -131,13 +131,13 @@ async function sendDeepResearch(userMessage, loading, session) {
 
         if (i === 1 && searchResults.length) {
             const chipsPromises = searchResults.slice(0, 4).map(async r => {
-                let domain = r.url;
+                let domain = String(r.url);
                 try { domain = new URL(r.url).hostname.replace('www.', ''); } catch { }
-                const favicon = await getFavicon(r.url);
+                const favicon = await getFavicon(String(r.url));
                 const faviconHtml = favicon ? `<img src="${escHtml(favicon)}" class="search-source-favicon" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline-block';">` : '';
                 const fallbackIcon = `<i class="fa-solid fa-link" style="font-size:9px;${favicon ? 'display:none;' : ''}"></i>`;
                 const chip = document.createElement('a');
-                chip.href = r.url;
+                chip.href = String(r.url);
                 chip.target = '_blank';
                 chip.rel = 'noopener noreferrer';
                 chip.className = 'dr-source-chip';
@@ -155,8 +155,17 @@ async function sendDeepResearch(userMessage, loading, session) {
     if (searchResults.length) {
         searchContext = `Web research results for: "${userMessage}"\n\n`;
         searchResults.forEach((r, i) => {
-            searchContext += `[${i + 1}] ${r.title || 'No title'}\nURL: ${r.url}\n`;
-            if (r.content) searchContext += `${r.content.slice(0, 400)}\n`;
+            const safeStringify = (val) => {
+                if (val === null || val === undefined) return '';
+                if (typeof val === 'string') return val;
+                if (typeof val === 'object') return JSON.stringify(val, null, 2);
+                return String(val);
+            };
+            const title = safeStringify(r.title) || 'No title';
+            const url = safeStringify(r.url) || '';
+            const content = safeStringify(r.content)?.slice(0, 400) || '';
+            searchContext += `[${i + 1}] ${title}\nURL: ${url}\n`;
+            if (content) searchContext += `${content}\n`;
             searchContext += '\n';
         });
         searchContext += `Based on the above research, provide a comprehensive, well-structured answer. Include citations by referencing source titles and URLs.`;
@@ -184,11 +193,11 @@ async function sendDeepResearch(userMessage, loading, session) {
         sourceLabel.innerHTML = '<i class="fa-solid fa-globe" style="font-size:11px;margin-right:5px;color:var(--accent)"></i>Sources';
         sourceBar.appendChild(sourceLabel);
         searchResults.slice(0, 4).forEach(r => {
-            let domain = r.url;
+            let domain = String(r.url);
             try { domain = new URL(r.url).hostname.replace('www.', ''); } catch { }
             const favicon = `https://favicon.vemetric.com/${domain}`;
             const chip = document.createElement('a');
-            chip.href = r.url;
+            chip.href = String(r.url);
             chip.target = '_blank';
             chip.rel = 'noopener noreferrer';
             chip.className = 'search-source-chip';
