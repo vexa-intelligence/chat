@@ -65,9 +65,7 @@ function toggleDeepResearch() {
 }
 
 function toggleWebSearch() {
-    if (typeof toggleSearchMode === 'function') {
-        toggleSearchMode();
-    }
+    if (typeof toggleSearchMode === 'function') toggleSearchMode();
     if (typeof isSearchMode === 'function') {
         const newState = isSearchMode();
         setVexaSetting('searchMode', newState);
@@ -77,66 +75,182 @@ function toggleWebSearch() {
 }
 
 function updateDropdownActiveStates() {
-    const thinkingItem = document.querySelector('[data-action="thinking"]');
-    const researchItem = document.querySelector('[data-action="research"]');
-    const searchItem = document.querySelector('[data-action="search"]');
+    const thinkingItem = document.querySelector('#attachDropdown [data-action="thinking"]');
+    const researchItem = document.querySelector('#attachDropdown [data-action="research"]');
+    const searchItem = document.querySelector('#attachDropdown [data-action="search"]');
+
+    const thinkingItemMobile = document.querySelector('#attachDropdownMobile [data-action="thinking"]');
+    const researchItemMobile = document.querySelector('#attachDropdownMobile [data-action="research"]');
+    const searchItemMobile = document.querySelector('#attachDropdownMobile [data-action="search"]');
 
     if (thinkingItem) thinkingItem.classList.toggle('active-mode', thinkingModeEnabled);
     if (researchItem) researchItem.classList.toggle('active-mode', deepResearchEnabled);
     if (searchItem && isSearchMode) searchItem.classList.toggle('active-mode', isSearchMode());
+
+    if (thinkingItemMobile) thinkingItemMobile.classList.toggle('active-mode', thinkingModeEnabled);
+    if (researchItemMobile) researchItemMobile.classList.toggle('active-mode', deepResearchEnabled);
+    if (searchItemMobile && isSearchMode) searchItemMobile.classList.toggle('active-mode', isSearchMode());
 }
 
-function toggleAttachDropdown() {
-    const dropdown = document.getElementById('attachDropdown');
-    const attachBtn = document.getElementById('attachBtn');
-    if (!dropdown || !attachBtn) return;
+function populateMobilePhotoStrip() {
+    if (window.innerWidth > 680) return;
+    const row = document.getElementById('attachPhotoRow');
+    if (!row) return;
+    const existing = row.querySelectorAll('.attach-photo-thumb');
+    existing.forEach(el => el.remove());
 
-    attachDropdownOpen = !attachDropdownOpen;
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.multiple = true;
+    input.style.display = 'none';
+    input.addEventListener('change', handleImageUpload);
+    document.body.appendChild(input);
 
-    if (attachDropdownOpen) {
-        updateDropdownActiveStates();
-        updateModeLabels();
-        dropdown.classList.add('show');
-        attachBtn.classList.add('active');
-        setTimeout(() => document.addEventListener('click', closeAttachDropdownOutside), 100);
-    } else {
-        dropdown.classList.remove('show');
-        attachBtn.classList.remove('active');
-        document.removeEventListener('click', closeAttachDropdownOutside);
+    for (let i = 0; i < 3; i++) {
+        const thumb = document.createElement('div');
+        thumb.className = 'attach-photo-thumb';
+        thumb.style.cssText = 'background:#2c2c2e;display:flex;align-items:center;justify-content:center;cursor:pointer;';
+        thumb.addEventListener('click', () => { closeAttachDropdown(); input.click(); });
+        row.appendChild(thumb);
     }
 }
 
 function updateModeLabels() {
     const activeMode = thinkingModeEnabled ? 'thinking' : deepResearchEnabled ? 'research' : (isSearchMode && isSearchMode()) ? 'search' : null;
     const statusEl = document.getElementById('attachModeStatus');
-    if (!statusEl) return;
+    const statusElMobile = document.getElementById('attachModeStatusMobile');
     const labels = { thinking: 'Thinking on', research: 'Deep Research on', search: 'Web Search on' };
+
     if (activeMode) {
-        statusEl.textContent = labels[activeMode];
-        statusEl.style.display = 'block';
+        if (statusEl) {
+            statusEl.textContent = labels[activeMode];
+            statusEl.style.display = 'block';
+        }
+        if (statusElMobile) {
+            statusElMobile.textContent = labels[activeMode];
+            statusElMobile.style.display = 'block';
+        }
     } else {
-        statusEl.style.display = 'none';
+        if (statusEl) statusEl.style.display = 'none';
+        if (statusElMobile) statusElMobile.style.display = 'none';
     }
 }
 
-function closeAttachDropdownOutside(event) {
-    const container = document.querySelector('.attach-dropdown-container');
-    const dropdown = document.getElementById('attachDropdown');
+function injectAttachButton() {
+    const attachBtn = document.getElementById('attachBtn');
+    if (!attachBtn) return;
 
-    if (container && container.contains(event.target)) return;
-    if (dropdown && dropdown.contains(event.target)) return;
+    attachBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleAttachDropdown();
+    });
 
-    closeAttachDropdown();
+    const pcDropdown = document.getElementById('attachDropdown');
+    if (pcDropdown) {
+        let isDragging = false;
+        let startY = 0;
+        let startBottom = 0;
+
+        const handle = pcDropdown.querySelector('.attach-dropdown-handle');
+        if (handle) {
+            handle.addEventListener('mousedown', (e) => {
+                isDragging = true;
+                startY = e.clientY;
+                startBottom = parseInt(window.getComputedStyle(pcDropdown).bottom);
+                pcDropdown.style.cursor = 'grabbing';
+                e.preventDefault();
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (!isDragging) return;
+                e.preventDefault();
+                const deltaY = e.clientY - startY;
+                const newBottom = startBottom - deltaY;
+                pcDropdown.style.bottom = newBottom + 'px';
+            });
+
+            document.addEventListener('mouseup', () => {
+                isDragging = false;
+                pcDropdown.style.cursor = '';
+            });
+        }
+    }
+
+    const imageUploadInput = document.getElementById('imageUploadInput');
+    if (imageUploadInput) {
+        imageUploadInput.addEventListener('change', handleImageUpload);
+    }
+
+    const docInput = document.createElement('input');
+    docInput.type = 'file';
+    docInput.id = 'docUploadInput';
+    docInput.accept = '.txt,.md,.markdown,.csv,.json,.html,.htm,.pdf,.doc,.docx,text/plain,text/markdown,text/csv,application/json,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    docInput.style.display = 'none';
+    docInput.multiple = true;
+    document.body.appendChild(docInput);
+
+    docInput.addEventListener('change', async (e) => {
+        const files = Array.from(e.target.files || []);
+        for (const file of files) {
+            await handleDocUpload(file);
+        }
+        e.target.value = '';
+    });
+
+    initPasteAndDrop();
+}
+
+function toggleAttachDropdown() {
+    const pcDropdown = document.getElementById('attachDropdown');
+    const mobileDropdown = document.getElementById('attachDropdownMobile');
+    const attachBtn = document.getElementById('attachBtn');
+
+    if (!pcDropdown || !mobileDropdown || !attachBtn) {
+        return;
+    }
+
+    attachDropdownOpen = !attachDropdownOpen;
+
+    if (attachDropdownOpen) {
+        let bd = document.getElementById('attachSheetBackdrop');
+        if (!bd) {
+            bd = document.createElement('div');
+            bd.id = 'attachSheetBackdrop';
+            bd.style.cssText = 'display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.5);';
+            bd.addEventListener('click', (e) => {
+                e.stopPropagation();
+                closeAttachDropdown();
+            });
+            document.body.appendChild(bd);
+        }
+        if (window.innerWidth <= 680) bd.style.display = 'block';
+        updateDropdownActiveStates();
+        populateMobilePhotoStrip();
+        updateModeLabels();
+
+        if (window.innerWidth <= 680) {
+            mobileDropdown.classList.add('show');
+        } else {
+            pcDropdown.classList.add('show');
+        }
+        attachBtn.classList.add('active');
+    } else {
+        closeAttachDropdown();
+    }
 }
 
 function closeAttachDropdown() {
-    const dropdown = document.getElementById('attachDropdown');
+    const pcDropdown = document.getElementById('attachDropdown');
+    const mobileDropdown = document.getElementById('attachDropdownMobile');
     const attachBtn = document.getElementById('attachBtn');
-    if (dropdown && attachBtn) {
-        dropdown.classList.remove('show');
+    const bd = document.getElementById('attachSheetBackdrop');
+    if (bd) bd.style.display = 'none';
+    if (pcDropdown) pcDropdown.classList.remove('show');
+    if (mobileDropdown) mobileDropdown.classList.remove('show');
+    if (attachBtn) {
         attachBtn.classList.remove('active');
         attachDropdownOpen = false;
-        document.removeEventListener('click', closeAttachDropdownOutside);
     }
 }
 
@@ -432,7 +546,7 @@ function parseDocWidgetData(text) {
 function renderDocAsWidget(fileName, text) {
     const wrapper = document.createElement('div');
     wrapper.className = 'doc-widget-wrap';
-    wrapper.style.cssText = 'background:var(--surface);border-radius:16px;overflow:hidden;margin-bottom:12px;border:1px solid var(--border);max-width:100%;';
+    wrapper.style.cssText = 'background:var(--surface);border-radius:12px;overflow:hidden;border:1px solid var(--border);max-width:340px;width:100%;';
 
     const header = document.createElement('div');
     header.style.cssText = 'display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--border);background:var(--surface2);';
@@ -440,7 +554,7 @@ function renderDocAsWidget(fileName, text) {
     wrapper.appendChild(header);
 
     const body = document.createElement('div');
-    body.style.cssText = 'padding:16px 18px;overflow-x:auto;';
+    body.style.cssText = 'padding:10px 14px;overflow-x:auto;max-height:180px;overflow-y:auto;font-size:0.8125rem;';
 
     const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
     let currentTable = null;
@@ -561,66 +675,25 @@ function renderDocAsWidget(fileName, text) {
 
 function addBubbleWithDocWidget(fileName, text, userText) {
     const feed = document.getElementById('feed');
-
     const userRow = document.createElement('div');
     userRow.className = 'msg-row user';
-    const userBub = document.createElement('div');
-    userBub.className = 'user-bub';
-    userBub.style.cssText = 'display:flex;flex-direction:column;gap:10px;max-width:90%;';
 
-    const widget = renderDocAsWidget(fileName, text);
-    userBub.appendChild(widget);
+    const chip = document.createElement('div');
+    chip.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--surface2);border-radius:10px;border:1px solid var(--border);max-width:260px;align-self:flex-end;margin-bottom:4px;';
+    const wordCount = text.trim().split(/\s+/).length;
+    const wc = wordCount > 1000 ? `${Math.round(wordCount / 1000 * 10) / 10}k words` : `${wordCount} words`;
+    chip.innerHTML = `<i class="fa-solid fa-file-lines" style="color:var(--accent);font-size:15px;flex-shrink:0;"></i><div><div style="font-size:0.875rem;font-weight:600;color:var(--fg);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px;">${escHtml(fileName)}</div><div style="font-size:0.75rem;color:var(--muted);">${wc}</div></div>`;
+    userRow.appendChild(chip);
 
     if (userText) {
-        const textP = document.createElement('p');
-        textP.style.cssText = 'margin:0;font-size:0.9375rem;line-height:1.55;';
-        textP.textContent = userText;
-        userBub.appendChild(textP);
+        const userBub = document.createElement('div');
+        userBub.className = 'user-bub';
+        userBub.textContent = userText;
+        userRow.appendChild(userBub);
     }
 
-    userRow.appendChild(userBub);
     feed.appendChild(userRow);
     return userRow;
-}
-
-function injectAttachButton() {
-    const attachBtn = document.getElementById('attachBtn');
-    if (!attachBtn) return;
-
-    attachBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        toggleAttachDropdown();
-    });
-
-    const dropdown = document.getElementById('attachDropdown');
-    if (dropdown) {
-        dropdown.addEventListener('click', (e) => {
-            e.stopPropagation();
-        });
-    }
-
-    const imageUploadInput = document.getElementById('imageUploadInput');
-    if (imageUploadInput) {
-        imageUploadInput.addEventListener('change', handleImageUpload);
-    }
-
-    const docInput = document.createElement('input');
-    docInput.type = 'file';
-    docInput.id = 'docUploadInput';
-    docInput.accept = '.txt,.md,.markdown,.csv,.json,.html,.htm,.pdf,.doc,.docx,text/plain,text/markdown,text/csv,application/json,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-    docInput.style.display = 'none';
-    docInput.multiple = true;
-    document.body.appendChild(docInput);
-
-    docInput.addEventListener('change', async (e) => {
-        const files = Array.from(e.target.files || []);
-        for (const file of files) {
-            await handleDocUpload(file);
-        }
-        e.target.value = '';
-    });
-
-    initPasteAndDrop();
 }
 
 function initPasteAndDrop() {

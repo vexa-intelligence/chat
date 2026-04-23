@@ -143,7 +143,8 @@
                                     <button class="input-tool-btn" id="attachBtn" title="Attach files">
                                         <i class="fa-solid fa-plus" style="font-size:15px"></i>
                                     </button>
-                                    <div class="attach-dropdown" id="attachDropdown">
+                                    <div class="attach-dropdown attach-dropdown-pc" id="attachDropdown">
+                                        <div class="attach-dropdown-handle"></div>
                                         <div class="attach-dropdown-status" id="attachModeStatus" style="display:none">
                                         </div>
                                         <div class="attach-dropdown-section-label">Modes</div>
@@ -183,13 +184,12 @@
                                                 <div class="sub-text">TXT, PDF, CSV, JSON, Word, MD…</div>
                                             </span>
                                         </div>
-                                        <div class="attach-dropdown-item" onclick="triggerImageUpload()">
+                                        <div class="attach-dropdown-item" onclick="navigate('/images')">
                                             <i class="fa-solid fa-image"></i>
                                             <span>
-                                                <div class="main-text">Upload image</div>
-                                                <div class="sub-text">Ask AI about your image</div>
+                                                <div class="main-text">Create image</div>
+                                                <div class="sub-text">Visualize anything</div>
                                             </span>
-                                            <i class="fa-solid fa-check mode-check"></i>
                                         </div>
                                     </div>
                                 </div>
@@ -814,6 +814,110 @@
 
     <div class="lightbox-overlay hidden" id="lightboxOverlay">
         <img class="lightbox-image" id="lightboxImage">
+    </div>
+
+    <div class="attach-dropdown attach-dropdown-pc" id="attachDropdown">
+        <div class="attach-dropdown-status" id="attachModeStatus" style="display:none">
+        </div>
+        <div class="attach-dropdown-section-label">Modes</div>
+        <div class="attach-dropdown-item" data-action="thinking" onclick="toggleThinkingMode()">
+            <i class="fa-solid fa-lightbulb"></i>
+            <span>
+                <div class="main-text">Thinking</div>
+                <div class="sub-text">Step-by-step visible reasoning</div>
+            </span>
+            <i class="fa-solid fa-check mode-check"></i>
+        </div>
+        <div class="attach-dropdown-item" data-action="search" onclick="toggleWebSearch()">
+            <i class="fa-solid fa-compass"></i>
+            <span>
+                <div class="main-text">Web search</div>
+                <div class="sub-text">Search the internet for answers</div>
+            </span>
+            <i class="fa-solid fa-check mode-check"></i>
+        </div>
+        <div class="attach-dropdown-item" data-action="research" onclick="toggleDeepResearch()">
+            <i class="fa-solid fa-flask"></i>
+            <span>
+                <div class="main-text">Deep research</div>
+                <div class="sub-text">Multi-source in-depth analysis</div>
+            </span>
+            <i class="fa-solid fa-check mode-check"></i>
+        </div>
+        <div class="attach-dropdown-divider"></div>
+        <div class="attach-dropdown-section-label">Attach</div>
+        <div class="attach-dropdown-item" onclick="triggerDocUpload()">
+            <i class="fa-solid fa-file-lines"></i>
+            <span>
+                <div class="main-text">Upload file</div>
+                <div class="sub-text">TXT, PDF, CSV, JSON, Word, MD…</div>
+            </span>
+        </div>
+        <div class="attach-dropdown-item" onclick="navigate('/images')">
+            <i class="fa-solid fa-image"></i>
+            <span>
+                <div class="main-text">Create image</div>
+                <div class="sub-text">Visualize anything</div>
+            </span>
+            <i class="fa-solid fa-check mode-check"></i>
+        </div>
+    </div>
+
+    <div class="attach-dropdown attach-dropdown-mobile" id="attachDropdownMobile">
+        <div class="attach-dropdown-handle"></div>
+        <div class="attach-dropdown-header">
+            <span class="attach-dropdown-title">Vexa</span>
+            <button class="attach-dropdown-all-link" onclick="triggerImageUpload(); closeAttachDropdown();">All
+                Photos</button>
+        </div>
+        <div class="attach-photo-row" id="attachPhotoRow">
+            <button class="attach-photo-camera" onclick="triggerCameraCapture()">
+                <i class="fa-solid fa-camera"></i>
+            </button>
+        </div>
+        <div class="attach-dropdown-divider"></div>
+        <div class="attach-dropdown-status" id="attachModeStatusMobile" style="display:none"></div>
+        <div class="attach-dropdown-card">
+            <div class="attach-dropdown-item" onclick="navigate('/images'); closeAttachDropdown();">
+                <i class="fa-solid fa-image"></i>
+                <span>
+                    <div class="main-text">Create image</div>
+                    <div class="sub-text">Visualize anything</div>
+                </span>
+            </div>
+            <div class="attach-dropdown-item" data-action="thinking" onclick="toggleThinkingMode()">
+                <i class="fa-solid fa-lightbulb"></i>
+                <span>
+                    <div class="main-text">Thinking</div>
+                    <div class="sub-text">Think longer for better answers</div>
+                </span>
+                <i class="fa-solid fa-check mode-check"></i>
+            </div>
+            <div class="attach-dropdown-item" data-action="research" onclick="toggleDeepResearch()">
+                <i class="fa-solid fa-binoculars"></i>
+                <span>
+                    <div class="main-text">Deep research</div>
+                    <div class="sub-text">Get a detailed report</div>
+                </span>
+                <i class="fa-solid fa-check mode-check"></i>
+            </div>
+            <div class="attach-dropdown-item" data-action="search" onclick="toggleWebSearch()">
+                <i class="fa-solid fa-globe"></i>
+                <span>
+                    <div class="main-text">Web search</div>
+                    <div class="sub-text">Find real-time news and info</div>
+                </span>
+                <i class="fa-solid fa-check mode-check"></i>
+            </div>
+            <div class="attach-dropdown-item" onclick="triggerDocUpload()">
+                <i class="fa-solid fa-file-lines"></i>
+                <span>
+                    <div class="main-text">Upload file</div>
+                    <div class="sub-text">TXT, PDF, CSV, JSON, Word, MD…</div>
+                </span>
+            </div>
+        </div>
+        <div style="height:8px"></div>
     </div>
 
     <script>

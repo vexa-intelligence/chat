@@ -116,10 +116,10 @@ function detectVisitUrl(text) {
     const urls = text.match(URL_RE);
     if (!urls || !urls.length) return null;
     const hasIntent = VISIT_INTENT_RE.test(text);
-    if (hasIntent) return urls[0];
-    const stripped = text.replace(URL_RE, '').trim();
-    if (stripped.length < 20) return urls[0];
-    return null;
+    if (!hasIntent) return null;
+    const stripped = text.replace(URL_RE, '').replace(VISIT_INTENT_RE, '').trim();
+    if (stripped.length > 30) return null;
+    return urls[0];
 }
 
 function parseHtmlToText(html) {
@@ -245,7 +245,7 @@ async function sendChatTextWithSearch(userMessage, loading, session) {
         attachCopyText(loading, () => reply);
         attachCodeCopyListeners(loading);
 
-        return reply;
+        return searchResults.length ? { content: reply, sources: searchResults } : reply;
     }
 
     if (!isSearchMode()) {
@@ -328,17 +328,9 @@ async function sendChatTextWithSearch(userMessage, loading, session) {
     attachCodeCopyListeners(loading);
 
     if (searchResults.length) {
-        const feed = document.getElementById('feed');
-        const bar = document.createElement('div');
-        bar.className = 'msg-row bot';
-        const bub = document.createElement('div');
-        bub.className = 'bot-bub search-sources-bub';
-        const sourcesRow = document.createElement('div');
-        sourcesRow.className = 'search-sources-row';
-        const label = document.createElement('span');
-        label.className = 'search-sources-label';
-        label.innerHTML = '<i class="fa-solid fa-globe" style="font-size:11px;margin-right:4px;color:var(--accent)"></i>Sources';
-        sourcesRow.appendChild(label);
+        const sourceBar = document.createElement('div');
+        sourceBar.className = 'dr-final-sources';
+        sourceBar.innerHTML = `<span class="dr-final-sources-label"><i class="fa-solid fa-globe" style="font-size:11px;margin-right:5px;color:var(--accent)"></i>Sources</span>`;
         searchResults.slice(0, 4).forEach(r => {
             let domain = '';
             try { domain = new URL(r.url).hostname.replace('www.', ''); } catch { domain = r.url; }
@@ -355,14 +347,12 @@ async function sendChatTextWithSearch(userMessage, loading, session) {
             img.onerror = function () { this.style.display = 'none'; };
             chip.appendChild(img);
             chip.appendChild(document.createTextNode(' ' + domain));
-            sourcesRow.appendChild(chip);
+            sourceBar.appendChild(chip);
         });
-        bub.appendChild(sourcesRow);
-        bar.appendChild(bub);
-        feed.appendChild(bar);
+        bub.insertBefore(sourceBar, contentDiv);
     }
 
-    return reply;
+    return searchResults.length ? { content: reply, sources: searchResults } : reply;
 }
 
 function initSearchMode() {
@@ -436,7 +426,12 @@ function initSearchMode() {
         }
 
         if (aiReply) {
-            session.messages.push({ role: 'assistant', content: aiReply });
+            const replyContent = typeof aiReply === 'object' && aiReply.sources ? aiReply.content : aiReply;
+            const msgToSave = { role: 'assistant', content: replyContent };
+            if (typeof aiReply === 'object' && aiReply.sources) {
+                msgToSave.research = { sources: aiReply.sources };
+            }
+            session.messages.push(msgToSave);
             const s = typeof getVexaSettings === 'function' ? getVexaSettings() : {};
             if (s.autoTitle !== false && session.messages.filter(m => m.role === 'user').length === 1) {
                 const aiTitle = await generateChatTitle(text, typeof aiReply === 'string' ? aiReply : '');

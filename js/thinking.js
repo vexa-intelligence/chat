@@ -216,7 +216,7 @@ async function sendDeepResearch(userMessage, loading, session) {
 
     if (!reply) throw new Error('Empty response');
 
-    reply = reply.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+    let cleanReply = reply.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
 
     const actionsEl = document.createElement('div');
     actionsEl.className = 'msg-actions';
@@ -225,7 +225,7 @@ async function sendDeepResearch(userMessage, loading, session) {
     attachCopyText(loading, () => reply);
     attachCodeCopyListeners(loading);
 
-    return reply;
+    return searchResults.length ? { content: reply, sources: searchResults } : reply;
 }
 
 async function sendChatWithVisionImages(text, images, loading, session) {

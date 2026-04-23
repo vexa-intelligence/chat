@@ -546,7 +546,13 @@ function addBubble(role, text, msgIndex, thinkingContent, researchContent) {
                 chip.target = '_blank';
                 chip.rel = 'noopener noreferrer';
                 chip.className = 'search-source-chip';
-                chip.innerHTML = `<i class="fa-solid fa-link" style="font-size:10px"></i> ${escHtml(domain)}`;
+                const img = document.createElement('img');
+                img.src = `https://favicon.vemetric.com/${domain}`;
+                img.className = 'search-source-favicon';
+                img.alt = '';
+                img.onerror = function () { this.style.display = 'none'; };
+                chip.appendChild(img);
+                chip.appendChild(document.createTextNode(' ' + domain));
                 sourceBar.appendChild(chip);
             });
             bub.appendChild(sourceBar);
@@ -767,10 +773,11 @@ async function saveChatToFirebase(sessionId, title, messages) {
     const db = window.firebaseDB;
     if (!db || !currentUser) return;
     try {
+        const clean = JSON.parse(JSON.stringify(messages, (key, val) => val === undefined ? null : val));
         await db.collection('chat_sessions').doc(sessionId).set({
             user_id: currentUser.uid,
             title,
-            messages,
+            messages: clean,
             updated_at: firebase.firestore.FieldValue.serverTimestamp(),
             created_at: firebase.firestore.FieldValue.serverTimestamp()
         }, { merge: true });
@@ -1212,8 +1219,8 @@ async function sendText(text, displayText) {
             session.messages.push({ role: 'assistant', content: replyContent });
         } else if (typeof replyContent === 'object' && replyContent.thinking) {
             session.messages.push({ role: 'assistant', content: replyContent.content, thinking: replyContent.thinking });
-        } else if (typeof replyContent === 'object' && replyContent.research) {
-            session.messages.push({ role: 'assistant', content: replyContent.content, research: replyContent.research });
+        } else if (typeof replyContent === 'object' && replyContent.sources) {
+            session.messages.push({ role: 'assistant', content: replyContent.content, research: { sources: replyContent.sources } });
         } else {
             session.messages.push({ role: 'assistant', content: replyContent });
         }
@@ -1331,6 +1338,27 @@ async function loadSessionIntoChat(session) {
                 } catch { }
             }
 
+            if (msg.role === 'user' && msg.docWidget && msg.docWidget.length) {
+                const userRow = document.createElement('div');
+                userRow.className = 'msg-row user';
+                msg.docWidget.forEach(dw => {
+                    const chip = document.createElement('div');
+                    chip.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--surface2);border-radius:10px;border:1px solid var(--border);max-width:260px;align-self:flex-end;margin-bottom:4px;';
+                    const wc = dw.wordCount > 1000 ? `${Math.round(dw.wordCount / 1000 * 10) / 10}k words` : `${dw.wordCount} words`;
+                    chip.innerHTML = `<i class="fa-solid fa-file-lines" style="color:var(--accent);font-size:15px;flex-shrink:0;"></i><div><div style="font-size:0.875rem;font-weight:600;color:var(--fg);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px;">${escHtml(dw.name)}</div><div style="font-size:0.75rem;color:var(--muted);">${wc}</div></div>`;
+                    userRow.appendChild(chip);
+                });
+                const rawText = typeof msg.content === 'string' ? msg.content.replace(/<file name="[^"]*">[\s\S]*?<\/file>/g, '').trim() : '';
+                if (rawText) {
+                    const userBub = document.createElement('div');
+                    userBub.className = 'user-bub';
+                    userBub.textContent = rawText;
+                    userRow.appendChild(userBub);
+                }
+                feed.appendChild(userRow);
+                return;
+            }
+
             if (content && typeof content === 'object' && content.type === 'image') {
                 const row = addBubble(msg.role === 'user' ? 'user' : 'bot', '', msg.role === 'user' ? index : undefined);
                 if (msg.role === 'assistant') {
@@ -1347,7 +1375,7 @@ async function loadSessionIntoChat(session) {
                     msg.role === 'user' ? 'user' : 'bot',
                     displayContent,
                     msg.role === 'user' ? index : undefined,
-                    msg.role === 'assistant' ? (msg.thinking || null) : null,
+                    msg.role === 'assistant' ? (typeof msg.thinking === 'string' ? msg.thinking : null) : null,
                     msg.research || null
                 );
             }
@@ -1563,7 +1591,7 @@ function doSend() {
             session = chatSessions.find(s => s.id === currentSessionId);
         }
 
-        session.messages.push({ role: 'user', content: fullText });
+        session.messages.push({ role: 'user', content: fullText, docWidget: docs.map(d => ({ name: d.name, wordCount: d.text.trim().split(/\s+/).length })) });
 
         busy = true;
         currentAbortController = new AbortController();
