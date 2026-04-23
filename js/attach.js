@@ -282,7 +282,30 @@ function triggerDocUpload() {
 }
 
 function triggerCameraCapture() {
-    toast.comingSoon('Camera capture');
+    closeAttachDropdown();
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.capture = 'environment';
+    input.style.display = 'none';
+    document.body.appendChild(input);
+    input.addEventListener('change', async () => {
+        const file = input.files[0];
+        if (!file) { input.remove(); return; }
+        if (file.size > MAX_IMAGE_BYTES) {
+            if (typeof toast !== 'undefined') toast.show('Image too large', 'Max 10 MB.');
+            input.remove();
+            return;
+        }
+        try {
+            await uploadImageFile(file);
+        } catch (err) {
+            console.error('Camera capture upload failed:', err);
+            if (typeof toast !== 'undefined') toast.show('Upload failed', 'Could not upload photo.');
+        }
+        input.remove();
+    });
+    input.click();
 }
 
 function getDocIcon(mimeType, fileName) {
@@ -432,13 +455,7 @@ async function handleImageUpload(event) {
     }
 
     try {
-        const reader = new FileReader();
-        reader.onload = async function (e) {
-            const dataUrl = e.target.result;
-            addImageToInput(dataUrl);
-            updateAttachBtnIcon();
-        };
-        reader.readAsDataURL(file);
+        await uploadImageFile(file);
     } catch (error) {
         console.error('Error processing image:', error);
         alert('Failed to process image. Please try again.');
@@ -447,10 +464,70 @@ async function handleImageUpload(event) {
     event.target.value = '';
 }
 
-function addImageToInput(imageUrl) {
-    const inp = document.getElementById('inp');
-    if (!inp) return;
+async function uploadImageFile(file) {
+    const tempId = 'img-upload-' + Date.now();
+    const placeholder = document.createElement('div');
+    placeholder.className = 'input-image-preview';
+    placeholder.id = tempId;
+    placeholder.innerHTML = `<div style="width:72px;height:72px;border-radius:8px;background:var(--surface2);display:flex;align-items:center;justify-content:center;"><i class="fa-solid fa-spinner fa-spin" style="color:var(--muted);font-size:18px;"></i></div>`;
+    const imagesRow = document.getElementById('inputImagesRow') || createImagesRow();
+    imagesRow.appendChild(placeholder);
 
+    let cloudinaryUrl = null;
+
+    try {
+        const CLOUDINARY_CLOUD = CONFIG.CLOUDINARY_CONFIG.cloudName;
+        const CLOUDINARY_PRESET = CONFIG.CLOUDINARY_CONFIG.uploadPreset;
+        const fd = new FormData();
+        fd.append('file', file);
+        fd.append('upload_preset', CLOUDINARY_PRESET);
+        const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`, {
+            method: 'POST',
+            body: fd
+        });
+        const data = await res.json();
+        cloudinaryUrl = data.secure_url || null;
+    } catch (err) {
+        console.error('Cloudinary upload failed:', err);
+    }
+
+    if (!cloudinaryUrl) {
+        placeholder.remove();
+        if (typeof toast !== 'undefined') toast.show('Upload failed', 'Could not upload image.');
+        return;
+    }
+
+    placeholder.innerHTML = `
+        <img src="${cloudinaryUrl}" alt="Uploaded image">
+        <button type="button" class="img-preview-remove" onclick="removeInputImage(this, '${cloudinaryUrl}')">
+            <i class="fa-solid fa-xmark" style="font-size:10px"></i>
+        </button>
+    `;
+    placeholder.removeAttribute('id');
+
+    if (!window.uploadedImages) window.uploadedImages = [];
+    window.uploadedImages.push(cloudinaryUrl);
+
+    if (window.firebaseDB && window.currentUser) {
+        try {
+            await window.firebaseDB.collection('uploaded_images').add({
+                user_id: window.currentUser.uid,
+                cloudinary_url: cloudinaryUrl,
+                uploaded_at: firebase.firestore.FieldValue.serverTimestamp()
+            });
+        } catch (err) {
+            console.error('Firestore log failed:', err);
+        }
+    }
+
+    const inp = document.getElementById('inp');
+    if (inp) inp.placeholder = 'Ask about the image...';
+    updateAttachBtnIcon();
+    updateFeedEmptyTitlePosition();
+}
+
+function addImageToInput(imageUrl) {
+    const imagesRow = document.getElementById('inputImagesRow') || createImagesRow();
     const imagePreview = document.createElement('div');
     imagePreview.className = 'input-image-preview';
     imagePreview.innerHTML = `
@@ -459,14 +536,11 @@ function addImageToInput(imageUrl) {
             <i class="fa-solid fa-xmark" style="font-size:10px"></i>
         </button>
     `;
-
-    const imagesRow = document.getElementById('inputImagesRow') || createImagesRow();
     imagesRow.appendChild(imagePreview);
-
     if (!window.uploadedImages) window.uploadedImages = [];
     window.uploadedImages.push(imageUrl);
-
-    inp.placeholder = 'Ask about the image...';
+    const inp = document.getElementById('inp');
+    if (inp) inp.placeholder = 'Ask about the image...';
     updateAttachBtnIcon();
     updateFeedEmptyTitlePosition();
 }
@@ -736,12 +810,8 @@ function initPasteAndDrop() {
                 if (typeof toast !== 'undefined') toast.show('Image too large', 'Max 10 MB per image.');
                 continue;
             }
-            const reader = new FileReader();
-            reader.onload = (ev) => {
-                addImageToInput(ev.target.result);
-                updateAttachBtnIcon();
-            };
-            reader.readAsDataURL(file);
+            await uploadImageFile(file);
+            updateAttachBtnIcon();
         }
 
         for (const item of docFiles) {
@@ -776,12 +846,8 @@ function initPasteAndDrop() {
                     if (typeof toast !== 'undefined') toast.show('Image too large', 'Max 10 MB.');
                     continue;
                 }
-                const reader = new FileReader();
-                reader.onload = (ev) => {
-                    addImageToInput(ev.target.result);
-                    updateAttachBtnIcon();
-                };
-                reader.readAsDataURL(file);
+                await uploadImageFile(file);
+                updateAttachBtnIcon();
             } else {
                 await handleDocUpload(file);
             }

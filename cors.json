@@ -1,0 +1,15 @@
+[
+    {
+        "origin": [
+            "http://127.0.0.1:8788",
+            "https://vexa-ai.pages.dev"
+        ],
+        "method": [
+            "GET",
+            "PUT",
+            "POST",
+            "DELETE"
+        ],
+        "maxAgeSeconds": 3600
+    }
+]

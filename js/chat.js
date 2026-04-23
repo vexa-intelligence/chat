@@ -722,29 +722,43 @@ async function generateImageCaption(prompt) {
 function swapImage(row, url, prompt) {
     const bub = row.querySelector('.bot-bub');
     bub.innerHTML = '';
-    const wrap = document.createElement('div');
-    wrap.className = 'gen-img-wrap';
+
+    const isExpired = !url || url.startsWith('blob:') === false && url.length < 10;
+    if (!url || (url.startsWith('blob:') && !url)) {
+        bub.innerHTML = `<div class="bot-bub-content" style="color:var(--muted);font-size:0.85rem;">Image not available after refresh.</div>`;
+        return;
+    }
+
     const cap = document.createElement('div');
     cap.className = 'gen-img-cap';
     cap.textContent = 'Generating caption...';
+    bub.appendChild(cap);
+
+    const wrap = document.createElement('div');
+    wrap.className = 'gen-img-wrap';
+    wrap.style.cssText = 'margin-top:10px;';
+
     const img = document.createElement('img');
     img.className = 'gen-img';
     img.src = url;
     img.alt = prompt;
     img.style.cursor = 'pointer';
     img.onclick = () => openLightbox(url);
-    img.onerror = () => { bub.innerHTML = `<div class="bot-bub-content">${fmt('Could not load image.')}</div>`; };
-    wrap.appendChild(cap);
+    img.onerror = () => {
+        wrap.remove();
+        cap.remove();
+        bub.innerHTML = `<div class="bot-bub-content" style="color:var(--muted);font-size:0.85rem;">Image not available after refresh.</div>`;
+    };
+
     wrap.appendChild(img);
-    bub.appendChild(wrap);
-    saveMyImage(url, prompt);
+    row.appendChild(wrap);
+
+    if (typeof saveMyImage === 'function') saveMyImage(url, prompt);
 
     generateImageCaption(prompt).then(aiCaption => {
         cap.textContent = aiCaption;
     });
 }
-
-
 
 async function generateChatTitle(userMessage, aiReply) {
     try {
@@ -1025,42 +1039,23 @@ async function sendChatImage(prompt, loading) {
     }
 }
 
-async function getImageDescription(dataUrl) {
-    return new Promise((resolve) => {
-        const img = new Image();
-        img.onload = () => {
-            const canvas = document.createElement('canvas');
-            const MAX = 512;
-            const scale = Math.min(1, MAX / Math.max(img.width, img.height));
-            canvas.width = Math.round(img.width * scale);
-            canvas.height = Math.round(img.height * scale);
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-
-            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-            let r = 0, g = 0, b = 0, brightness = 0;
-            const total = imageData.length / 4;
-            for (let i = 0; i < imageData.length; i += 4) {
-                r += imageData[i];
-                g += imageData[i + 1];
-                b += imageData[i + 2];
-                brightness += (imageData[i] * 0.299 + imageData[i + 1] * 0.587 + imageData[i + 2] * 0.114);
-            }
-            r = Math.round(r / total);
-            g = Math.round(g / total);
-            b = Math.round(b / total);
-            brightness = Math.round(brightness / total);
-
-            const dominant = r > g && r > b ? 'reddish' : g > r && g > b ? 'greenish' : b > r && b > g ? 'bluish' : 'neutral';
-            const brightnessDesc = brightness > 200 ? 'very bright' : brightness > 128 ? 'moderately bright' : brightness > 64 ? 'somewhat dark' : 'very dark';
-            const aspect = img.width > img.height * 1.2 ? 'landscape/wide' : img.height > img.width * 1.2 ? 'portrait/tall' : 'square';
-            const res = `${img.width}x${img.height}px`;
-
-            resolve(`[Image attached — ${res}, ${aspect} orientation, ${brightnessDesc}, dominant tone: ${dominant}. Avg RGB: ${r},${g},${b}]`);
-        };
-        img.onerror = () => resolve('[Image attached — could not analyze]');
-        img.src = dataUrl;
-    });
+async function getImageDescription(imageUrl) {
+    try {
+        const res = await fetch('https://vexa-ai.pages.dev/visual', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                prompt: 'Describe this image in detail including objects, colors, composition, and any text visible.',
+                image_url: imageUrl,
+                template: 'summary'
+            })
+        });
+        const data = await res.json();
+        if (data.success && data.response) return data.response;
+    } catch (err) {
+        console.error('Visual API failed:', err);
+    }
+    return '[Image attached — could not analyze]';
 }
 
 async function sendChatWithImages(text, images, loading, session) {
@@ -1115,34 +1110,31 @@ function addBubbleWithImages(role, text, images) {
     const row = document.createElement('div');
     row.className = `msg-row ${role}`;
 
-    const bub = document.createElement('div');
-    bub.className = `${role}-bub`;
-
-    if (text) {
-        const textP = document.createElement('p');
-        textP.textContent = text;
-        bub.appendChild(textP);
-    }
-
     if (images && images.length > 0) {
         const imageContainer = document.createElement('div');
-        imageContainer.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;';
+        imageContainer.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;margin-bottom:6px;justify-content:flex-end;';
         images.forEach(imageUrl => {
-            const imgWrapper = document.createElement('div');
-            imgWrapper.style.cssText = 'position:relative;display:inline-block;max-width:200px;border-radius:var(--radius);overflow:hidden;border:1px solid var(--border);';
             const img = document.createElement('img');
             img.src = imageUrl;
             img.alt = 'Uploaded image';
-            img.style.cssText = 'width:100%;height:auto;display:block;object-fit:cover;';
-            imgWrapper.appendChild(img);
-            imageContainer.appendChild(imgWrapper);
+            img.style.cssText = 'max-width:220px;max-height:220px;border-radius:12px;object-fit:cover;border:1px solid var(--border);cursor:pointer;display:block;';
+            img.onclick = () => openLightbox(imageUrl);
+            img.onerror = () => { img.remove(); };
+            imageContainer.appendChild(img);
         });
-        bub.appendChild(imageContainer);
+        row.appendChild(imageContainer);
     }
 
-    row.appendChild(bub);
+    if (text) {
+        const bub = document.createElement('div');
+        bub.className = `${role}-bub`;
+        bub.textContent = text;
+        row.appendChild(bub);
+    }
+
     feed.appendChild(row);
     setTimeout(() => { feed.scrollTo({ top: feed.scrollHeight, behavior: 'smooth' }); }, 100);
+
     return row;
 }
 
@@ -1188,20 +1180,30 @@ async function sendText(text, displayText) {
         document.getElementById('editIndicator')?.remove();
     }
 
-    session.messages.push({ role: 'user', content: text });
-    addBubble('user', displayText || text);
+    const imagesToSend = window.uploadedImages?.length > 0 ? [...window.uploadedImages] : [];
+    if (imagesToSend.length > 0) {
+        window.uploadedImages = [];
+        document.getElementById('inputImagesRow')?.remove();
+        const inpEl = document.getElementById('inp');
+        if (inpEl) inpEl.placeholder = 'Ask anything';
+        updateAttachBtnIcon();
+    }
+
+    if (imagesToSend.length > 0) {
+        session.messages.push({ role: 'user', content: text, images: imagesToSend });
+        addBubbleWithImages('user', displayText || text, imagesToSend);
+    } else {
+        session.messages.push({ role: 'user', content: text });
+        addBubble('user', displayText || text);
+    }
     const loading = addLoading();
 
     let aiReply = null;
     try {
         if (typeof closeImageOutput === 'function') closeImageOutput();
 
-        if (window.uploadedImages?.length > 0) {
-            aiReply = await sendChatWithImages(text, window.uploadedImages, loading, session);
-            window.uploadedImages = [];
-            document.getElementById('inputImagesRow')?.remove();
-            const inpEl = document.getElementById('inp');
-            if (inpEl) inpEl.placeholder = 'Ask anything';
+        if (imagesToSend.length > 0) {
+            aiReply = await sendChatWithImages(text, imagesToSend, loading, session);
         } else if (window.isDeepResearch && window.isDeepResearch()) {
             aiReply = await sendDeepResearch(text, loading, session);
         } else if (window.isThinkingMode && window.isThinkingMode()) {
@@ -1344,6 +1346,11 @@ async function loadSessionIntoChat(session) {
                     const parsed = JSON.parse(content);
                     if (parsed && typeof parsed === 'object' && parsed.type === 'image') content = parsed;
                 } catch { }
+            }
+
+            if (msg.role === 'user' && Array.isArray(msg.images) && msg.images.length > 0) {
+                addBubbleWithImages('user', typeof content === 'string' ? content : '', msg.images);
+                return;
             }
 
             if (msg.role === 'user' && msg.docWidget && msg.docWidget.length) {
