@@ -212,8 +212,20 @@ function fmt(raw) {
         return `<${tag}>${inner}</${tag}>`;
     });
 
-    html = html.replace(/<br-blank>/g, '<br><br>');
+    html = html.replace(/<br-blank>/g, '<br>');
+
+    const listBlocks = [];
+    html = html.replace(/<(ul|ol)>([\s\S]*?)<\/\1>/g, (_, tag, content) => {
+        const idx = listBlocks.length;
+        listBlocks.push(`<${tag}>${content}</${tag}>`);
+        return `\x00LIST${idx}\x00`;
+    });
+
     html = html.replace(/\n/g, '<br>');
+
+    html = html.replace(/\x00LIST(\d+)\x00/g, (_, idx) => {
+        return listBlocks[parseInt(idx)];
+    });
 
     html = html.replace(/\x00CODE(\d+)\x00/g, (_, idx) => {
         const { lang, code } = codeBlocks[parseInt(idx)];
@@ -229,6 +241,8 @@ function fmt(raw) {
     html = html.replace(/\x00SOURCES(\d+)\x00/g, (_, idx) => {
         return searchSourcesBlocks[parseInt(idx)] || '';
     });
+
+    html = html.replace(/(<br>\s*){3,}/g, '<br><br>');
 
     return html;
 }
@@ -375,7 +389,7 @@ function attachCopyText(row, getText) {
         const text = getText();
         navigator.clipboard.writeText(text).then(() => {
             btn.innerHTML = '<i class="fa-solid fa-check"></i> Copied';
-            setTimeout(() => { btn.innerHTML = '<i class="fa-regular fa-copy"></i> Copy'; }, 2000);
+            setTimeout(() => { btn.innerHTML = '<i class="fa-regular fa-copy"></i>'; }, 2000);
         }).catch(() => {
             const ta = document.createElement('textarea');
             ta.value = text;
@@ -384,8 +398,30 @@ function attachCopyText(row, getText) {
             document.execCommand('copy');
             document.body.removeChild(ta);
             btn.innerHTML = '<i class="fa-solid fa-check"></i> Copied';
-            setTimeout(() => { btn.innerHTML = '<i class="fa-regular fa-copy"></i> Copy'; }, 2000);
+            setTimeout(() => { btn.innerHTML = '<i class="fa-regular fa-copy"></i>'; }, 2000);
         });
+    });
+    const speakBtn = row.querySelector('.speak-btn');
+    if (!speakBtn) return;
+    speakBtn.addEventListener('click', () => {
+        if (window.speechSynthesis.speaking) {
+            window.speechSynthesis.cancel();
+            speakBtn.innerHTML = '<i class="fa-solid fa-volume-high"></i>';
+            speakBtn.classList.remove('speaking');
+            return;
+        }
+        const text = getText();
+        const plain = text.replace(/```[\s\S]*?```/g, 'code block').replace(/[#*`~>]/g, '').replace(/\s+/g, ' ').trim();
+        const utt = new SpeechSynthesisUtterance(plain);
+        utt.onstart = () => {
+            speakBtn.innerHTML = '<i class="fa-solid fa-stop"></i> Stop';
+            speakBtn.classList.add('speaking');
+        };
+        utt.onend = utt.onerror = () => {
+            speakBtn.innerHTML = '<i class="fa-solid fa-volume-high"></i>';
+            speakBtn.classList.remove('speaking');
+        };
+        window.speechSynthesis.speak(utt);
     });
 }
 
@@ -397,7 +433,7 @@ function attachCodeCopyListeners(row) {
             const code = pre.innerText || pre.textContent;
             navigator.clipboard.writeText(code).then(() => {
                 btn.innerHTML = '<i class="fa-solid fa-check"></i> Copied';
-                setTimeout(() => { btn.innerHTML = '<i class="fa-regular fa-copy"></i> Copy'; }, 2000);
+                setTimeout(() => { btn.innerHTML = '<i class="fa-regular fa-copy"></i>'; }, 2000);
             }).catch(() => {
                 const ta = document.createElement('textarea');
                 ta.value = code;
@@ -406,56 +442,10 @@ function attachCodeCopyListeners(row) {
                 document.execCommand('copy');
                 document.body.removeChild(ta);
                 btn.innerHTML = '<i class="fa-solid fa-check"></i> Copied';
-                setTimeout(() => { btn.innerHTML = '<i class="fa-regular fa-copy"></i> Copy'; }, 2000);
+                setTimeout(() => { btn.innerHTML = '<i class="fa-regular fa-copy"></i>'; }, 2000);
             });
         });
     });
-}
-
-function openMsgContextMenu(e, msgIndex) {
-    closeMsgContextMenu();
-    const session = chatSessions.find(s => s.id === currentSessionId);
-    const msg = session?.messages[msgIndex];
-    if (!msg) return;
-
-    const menu = document.createElement('div');
-    menu.className = 'msg-ctx-menu';
-    menu.id = 'msgCtxMenu';
-
-    const now = new Date();
-    const timeStr = now.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-
-    menu.innerHTML = `<div class="msg-ctx-time">${timeStr}</div>
-        <button class="msg-ctx-item" id="ctxCopy"><i class="fa-regular fa-copy" style="font-size:14px;width:16px"></i> Copy</button>
-        ${msg.role === 'user' ? `<button class="msg-ctx-item" id="ctxEdit"><i class="fa-solid fa-pencil" style="font-size:14px;width:16px"></i> Edit</button>` : ''}`;
-
-    document.body.appendChild(menu);
-
-    const menuW = menu.offsetWidth || 200;
-    const menuH = menu.offsetHeight || 100;
-    let left = e.clientX - menuW / 2;
-    left = Math.max(8, Math.min(left, window.innerWidth - menuW - 8));
-    let top = e.clientY - menuH - 12;
-    if (top < 8) top = e.clientY + 12;
-    menu.style.left = left + 'px';
-    menu.style.top = top + 'px';
-
-    menu.querySelector('#ctxCopy')?.addEventListener('click', () => {
-        const content = typeof msg.content === 'string' ? msg.content : '';
-        navigator.clipboard.writeText(content).catch(() => { });
-        closeMsgContextMenu();
-    });
-
-    menu.querySelector('#ctxEdit')?.addEventListener('click', () => {
-        startEditMessage(msgIndex);
-        closeMsgContextMenu();
-    });
-
-    setTimeout(() => document.addEventListener('click', closeMsgContextMenu, { once: true }), 10);
-}
-
-function closeMsgContextMenu() {
-    document.getElementById('msgCtxMenu')?.remove();
 }
 
 function startEditMessage(msgIndex) {
@@ -474,8 +464,13 @@ function startEditMessage(msgIndex) {
     const indicator = document.createElement('div');
     indicator.className = 'edit-indicator';
     indicator.id = 'editIndicator';
-    indicator.innerHTML = `<i class="fa-solid fa-pencil" style="font-size:12px"></i><span>Edit message</span><button onclick="cancelEdit()" style="margin-left:auto;color:var(--muted);background:none;border:none;cursor:pointer;padding:2px 4px;"><i class="fa-solid fa-xmark"></i></button>`;
+    indicator.innerHTML = `<i class="fa-regular fa-pen-to-square" style="font-size:12px"></i><span>Edit message</span><button onclick="cancelEdit()" style="margin-left:auto;color:var(--muted);background:none;border:none;cursor:pointer;padding:2px 4px;"><i class="fa-solid fa-xmark"></i></button>`;
     inputBox.insertBefore(indicator, inputBox.firstChild);
+
+    const inputBoxStyled = document.querySelector('.input-box');
+    if (inputBoxStyled) {
+        inputBoxStyled.style.borderRadius = '23px';
+    }
 
     inp.value = typeof msg.content === 'string' ? msg.content : '';
     inp.style.height = 'auto';
@@ -493,6 +488,10 @@ function cancelEdit() {
         inp.style.height = 'auto';
         inp.dispatchEvent(new Event('input'));
     }
+    const inputBoxStyled = document.querySelector('.input-box');
+    if (inputBoxStyled) {
+        inputBoxStyled.style.borderRadius = '40px';
+    }
 }
 
 function addBubble(role, text, msgIndex, thinkingContent, researchContent) {
@@ -507,21 +506,33 @@ function addBubble(role, text, msgIndex, thinkingContent, researchContent) {
         const bub = document.createElement('div');
         bub.className = 'user-bub';
         bub.innerHTML = escHtml(text).replace(/\n/g, '<br>');
+        if (msgIndex !== undefined) {
+            const actionsEl = document.createElement('div');
+            actionsEl.className = 'user-msg-actions';
+            actionsEl.innerHTML = `
+                <button class="user-action-btn" data-action="copy" title="Copy">
+                    <i class="fa-regular fa-copy"></i>
+                </button>
+                <button class="user-action-btn" data-action="edit" title="Edit">
+                    <i class="fa-regular fa-pen-to-square"></i>
+                </button>
+            `;
+            row.appendChild(actionsEl);
+
+            actionsEl.querySelector('[data-action="copy"]').addEventListener('click', () => {
+                navigator.clipboard.writeText(text).catch(() => { });
+            });
+
+            actionsEl.querySelector('[data-action="edit"]').addEventListener('click', () => {
+                startEditMessage(msgIndex);
+            });
+        }
+        row.appendChild(bub);
         if (showTs) {
             const tsEl = document.createElement('div');
             tsEl.className = 'msg-timestamp';
             tsEl.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            bub.appendChild(tsEl);
-        }
-        row.appendChild(bub);
-
-        if (msgIndex !== undefined) {
-            let pressTimer;
-            bub.addEventListener('contextmenu', e => { e.preventDefault(); openMsgContextMenu(e, msgIndex); });
-            bub.addEventListener('touchstart', e => { pressTimer = setTimeout(() => openMsgContextMenu(e.touches[0], msgIndex), 500); }, { passive: true });
-            bub.addEventListener('touchend', () => clearTimeout(pressTimer));
-            bub.addEventListener('touchmove', () => clearTimeout(pressTimer));
-            bub.addEventListener('dblclick', e => openMsgContextMenu(e, msgIndex));
+            row.appendChild(tsEl);
         }
     } else {
         const bub = document.createElement('div');
@@ -561,8 +572,8 @@ function addBubble(role, text, msgIndex, thinkingContent, researchContent) {
         bub.appendChild(contentDiv);
 
         const actionsEl = document.createElement('div');
-        actionsEl.className = 'msg-actions';
-        actionsEl.innerHTML = '<button class="copy-text-btn" title="Copy message"><i class="fa-regular fa-copy"></i> Copy</button>';
+        actionsEl.className = 'bot-msg-actions';
+        actionsEl.innerHTML = '<button class="bot-action-btn copy-text-btn" title="Copy message"><i class="fa-regular fa-copy"></i></button><button class="bot-action-btn speak-btn" title="Read aloud"><i class="fa-solid fa-volume-high"></i></button>';
         bub.appendChild(actionsEl);
 
         if (showTs) {
@@ -645,8 +656,8 @@ function swapTextWithThinking(row, text, think) {
     bub.appendChild(contentDiv);
 
     const actionsEl = document.createElement('div');
-    actionsEl.className = 'msg-actions';
-    actionsEl.innerHTML = '<button class="copy-text-btn" title="Copy message"><i class="fa-regular fa-copy"></i> Copy</button>';
+    actionsEl.className = 'bot-msg-actions';
+    actionsEl.innerHTML = '<button class="bot-action-btn copy-text-btn" title="Copy message"><i class="fa-regular fa-copy"></i></button><button class="bot-action-btn speak-btn" title="Read aloud"><i class="fa-solid fa-volume-high"></i></button>';
     bub.appendChild(actionsEl);
     attachCopyText(row, () => text);
     attachCodeCopyListeners(row);
@@ -679,8 +690,8 @@ function swapTextWithThinkingAndResearch(row, text, searchResults) {
     bub.appendChild(textEl);
 
     const actionsEl = document.createElement('div');
-    actionsEl.className = 'msg-actions';
-    actionsEl.innerHTML = '<button class="copy-text-btn" title="Copy"><i class="fa-regular fa-copy"></i> Copy</button>';
+    actionsEl.className = 'bot-msg-actions';
+    actionsEl.innerHTML = '<button class="bot-action-btn copy-text-btn" title="Copy message"><i class="fa-regular fa-copy"></i></button><button class="bot-action-btn speak-btn" title="Read aloud"><i class="fa-solid fa-volume-high"></i></button>';
     bub.appendChild(actionsEl);
     attachCopyText(row, () => text);
     attachCodeCopyListeners(row);
@@ -688,7 +699,7 @@ function swapTextWithThinkingAndResearch(row, text, searchResults) {
 
 function swapText(row, text) {
     const bub = row.querySelector('.bot-bub');
-    bub.innerHTML = `<div class="bot-bub-content">${fmt(text)}</div><div class="msg-actions"><button class="copy-text-btn" title="Copy message"><i class="fa-regular fa-copy"></i> Copy</button></div>`;
+    bub.innerHTML = `<div class="bot-bub-content">${fmt(text)}</div><div class="bot-msg-actions"><button class="bot-action-btn copy-text-btn" title="Copy message"><i class="fa-regular fa-copy"></i></button><button class="bot-action-btn speak-btn" title="Read aloud"><i class="fa-solid fa-volume-high"></i></button></div>`;
     attachCopyText(row, () => text);
     attachCodeCopyListeners(row);
 }
@@ -970,8 +981,8 @@ async function sendChatText(userMessage, loading, session) {
     }
 
     const actionsEl = document.createElement('div');
-    actionsEl.className = 'msg-actions';
-    actionsEl.innerHTML = '<button class="copy-text-btn" title="Copy message"><i class="fa-regular fa-copy"></i> Copy</button>';
+    actionsEl.className = 'bot-msg-actions';
+    actionsEl.innerHTML = '<button class="bot-action-btn copy-text-btn" title="Copy message"><i class="fa-regular fa-copy"></i></button><button class="bot-action-btn speak-btn" title="Read aloud"><i class="fa-solid fa-volume-high"></i></button>';
     bub.appendChild(actionsEl);
     attachCopyText(loading, () => text);
     attachCodeCopyListeners(loading);
@@ -1090,8 +1101,8 @@ async function sendChatWithImages(text, images, loading, session) {
     }
 
     const actionsEl = document.createElement('div');
-    actionsEl.className = 'msg-actions';
-    actionsEl.innerHTML = '<button class="copy-text-btn" title="Copy message"><i class="fa-regular fa-copy"></i> Copy</button>';
+    actionsEl.className = 'bot-msg-actions';
+    actionsEl.innerHTML = '<button class="bot-action-btn copy-text-btn" title="Copy message"><i class="fa-regular fa-copy"></i></button><button class="bot-action-btn speak-btn" title="Read aloud"><i class="fa-solid fa-volume-high"></i></button>';
     bub.appendChild(actionsEl);
     attachCopyText(loading, () => text2);
     attachCodeCopyListeners(loading);
@@ -1476,13 +1487,17 @@ function initChat() {
         inp.style.height = Math.min(inp.scrollHeight, 160) + 'px';
         const inputBox = document.querySelector('.input-box');
         if (inputBox) {
-            const minHeight = 24;
-            const maxHeight = 160;
-            const currentHeight = Math.min(inp.scrollHeight, 160);
-            const progress = Math.min((currentHeight - minHeight) / (maxHeight - minHeight), 1);
-            const baseRadius = 40;
-            const minRadius = 10;
-            inputBox.style.borderRadius = (baseRadius - (progress * (baseRadius - minRadius))) + 'px';
+            if (editingMsgIndex === null) {
+                const minHeight = 24;
+                const maxHeight = 160;
+                const currentHeight = Math.min(inp.scrollHeight, 160);
+                const progress = Math.min((currentHeight - minHeight) / (maxHeight - minHeight), 1);
+                const baseRadius = 30;
+                const minRadius = 5;
+                inputBox.style.borderRadius = (baseRadius - (progress * (baseRadius - minRadius))) + 'px';
+            } else {
+                inputBox.style.borderRadius = '23px';
+            }
         }
         sbtn.disabled = !inp.value.trim();
     });
