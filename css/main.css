@@ -4909,3 +4909,164 @@ body.show-timestamps .msg-timestamp {
 .settings-btn:active {
     transform: translateY(0);
 }
+
+.topbar-call-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--fg-muted);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+    flex-shrink: 0;
+}
+
+.topbar-call-btn:hover {
+    background: var(--surface);
+    color: var(--fg);
+}
+
+.voice-overlay {
+    position: fixed;
+    inset: 0;
+    background: var(--bg);
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+}
+
+.voice-overlay.active {
+    opacity: 1;
+    pointer-events: all;
+}
+
+.voice-heading {
+    position: absolute;
+    top: 72px;
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text);
+    font-family: var(--font);
+    letter-spacing: -0.02em;
+    pointer-events: none;
+}
+
+.voice-canvas-wrap {
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+#voiceOrbCanvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+}
+
+.voice-status-text {
+    position: absolute;
+    bottom: 160px;
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-size: 0.8125rem;
+    color: var(--muted);
+    font-family: var(--font);
+    letter-spacing: 0.01em;
+    pointer-events: none;
+}
+
+.voice-controls {
+    position: absolute;
+    bottom: 56px;
+    display: flex;
+    align-items: center;
+    gap: 24px;
+}
+
+.voice-ctrl-btn {
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 16px;
+    transition: transform 0.15s, opacity 0.15s, background 0.15s;
+    font-family: var(--font);
+}
+
+.voice-ctrl-btn:hover {
+    transform: scale(1.08);
+}
+
+.voice-ctrl-btn:active {
+    transform: scale(0.95);
+}
+
+.voice-ctrl-btn.pause {
+    background: var(--surface);
+    color: var(--text);
+}
+
+.voice-ctrl-btn.pause:hover {
+    background: var(--surface);
+}
+
+.voice-ctrl-btn.end {
+    width: 60px;
+    height: 60px;
+    background: #e11d48;
+    color: var(--text);
+    font-size: 18px;
+}
+
+.voice-ctrl-btn.end:hover {
+    background: #be123c;
+}
+
+.voice-thinking-icon {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -60%);
+    width: 160px;
+    height: 160px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 96px;
+    color: var(--text);
+    animation: voice-think-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes voice-think-pulse {
+
+    0%,
+    100% {
+        opacity: 0.6;
+        transform: translate(-50%, -60%) scale(1);
+    }
+
+    50% {
+        opacity: 1;
+        transform: translate(-50%, -60%) scale(1.06);
+    }
+}

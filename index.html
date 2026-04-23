@@ -121,6 +121,9 @@
                     <i class="fa-solid fa-chevron-down" style="font-size:10px;color:var(--muted)"></i>
                 </div>
                 <div class="topbar-right">
+                    <button class="topbar-call-btn" id="topbarCallBtn" title="Voice call">
+                        <i class="fa-solid fa-phone" style="font-size:14px"></i>
+                    </button>
                     <button class="icon-btn topbar-new-chat-btn" id="topbarNewChatBtn" onclick="newChat()">
                         <i class="fa-solid fa-pen-to-square" style="font-size:15px"></i>
                     </button>
@@ -715,6 +718,23 @@
         </div>
     </div>
 
+    <div class="voice-overlay" id="voiceOverlay">
+        <div class="voice-heading" id="voiceHeading"></div>
+        <canvas id="voiceOrbCanvas"></canvas>
+        <div class="voice-thinking-icon" id="voiceThinkingIcon" style="display:none">
+            <i class="fa-solid fa-brain"></i>
+        </div>
+        <div class="voice-status-text" id="voiceStatusText"></div>
+        <div class="voice-controls">
+            <button class="voice-ctrl-btn pause" id="voicePauseBtn" title="Pause">
+                <i class="fa-solid fa-pause"></i>
+            </button>
+            <button class="voice-ctrl-btn end" id="voiceEndBtn" title="End call">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+    </div>
+
     <div class="model-picker-overlay hidden" id="modelPickerOverlay">
         <div class="model-picker" id="modelPicker">
             <div class="model-picker-head">Model</div>
@@ -958,6 +978,7 @@
     <script src="/js/search.js"></script>
     <script src="/js/attach.js"></script>
     <script src="/js/thinking.js"></script>
+    <script src="/js/voice.js"></script>
     <script src="/js/vibrate.js"></script>
 </body>
 
