@@ -203,31 +203,39 @@
 
         recognition = new SR();
         recognition.continuous = false;
-        recognition.interimResults = true;
+        recognition.interimResults = false;
         recognition.lang = 'en-US';
 
-        recognition.onstart = () => { setPhase('listening'); currentTranscript = ''; };
+        recognition.onstart = () => {
+            setPhase('listening');
+            currentTranscript = '';
+        };
 
         recognition.onresult = (e) => {
-            let final = '';
-            let interim = '';
-            for (let i = e.resultIndex; i < e.results.length; i++) {
-                const t = e.results[i][0].transcript;
-                if (e.results[i].isFinal) final += t;
-                else interim += t;
-            }
-            currentTranscript = final || interim;
+            const t = e.results[0][0].transcript;
+            currentTranscript = t;
         };
 
         recognition.onend = () => {
             if (!voiceActive || isPaused) return;
-            if (currentTranscript.trim()) sendVoiceMessage(currentTranscript.trim());
-            else setTimeout(() => { if (voiceActive && !isPaused && !isSpeaking) startRecognition(); }, 300);
+
+            const text = currentTranscript.trim();
+            currentTranscript = '';
+
+            if (text.length > 0) {
+                sendVoiceMessage(text);
+            } else {
+                setTimeout(() => {
+                    if (voiceActive && !isPaused && !isSpeaking && !isProcessing) {
+                        startRecognition();
+                    }
+                }, 500);
+            }
         };
 
-        recognition.onerror = (e) => {
-            if ((e.error === 'no-speech' || e.error === 'aborted') && voiceActive && !isPaused && !isSpeaking) {
-                setTimeout(() => startRecognition(), 400);
+        recognition.onerror = () => {
+            if (voiceActive && !isPaused && !isSpeaking && !isProcessing) {
+                setTimeout(() => startRecognition(), 600);
             }
         };
 
